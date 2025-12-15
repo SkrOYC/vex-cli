@@ -332,6 +332,12 @@ class VibeConfig(BaseSettings):
         ),
     )
 
+    use_deepagents: bool = Field(default=False, env="VIBE_USE_DEEPAGENTS")
+
+    mcp_servers: list[MCPServer] = Field(
+        default_factory=list, description="Preferred MCP server configuration entries."
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="VIBE_", case_sensitive=False, extra="ignore"
     )
