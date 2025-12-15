@@ -63,9 +63,11 @@ class TestApprovalFlow:
 
         engine = VibeEngine(config=config, approval_callback=approval_bridge)
 
-        await engine.handle_approval(True, "test feedback")
+        await engine.handle_approval(True, "test-request-id", "test feedback")
 
-        approval_bridge.respond.assert_called_once_with(True, "test feedback")
+        approval_bridge.respond.assert_called_once_with(
+            True, "test-request-id", "test feedback"
+        )
 
     @pytest.mark.asyncio
     async def test_resume_execution_placeholder(self):

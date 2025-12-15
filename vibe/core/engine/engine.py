@@ -161,11 +161,11 @@ class VibeEngine:
                 yield translated
 
     async def handle_approval(
-        self, approved: bool, feedback: str | None = None
+        self, approved: bool, request_id: str, feedback: str | None = None
     ) -> None:
         """Handle approval decision from TUI."""
         if self.approval_bridge:
-            await self.approval_bridge.respond(approved, feedback)
+            await self.approval_bridge.respond(approved, request_id, feedback)
 
     async def resume_execution(self, decision: dict[str, Any]) -> None:
         """Resume execution after approval."""

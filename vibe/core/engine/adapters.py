@@ -144,8 +144,8 @@ class ApprovalBridge:
         # In real implementation, this would trigger TUI dialog via callback
         # For now, auto-approve (will be connected to TUI later)
         try:
-            # Wait for decision with timeout (1 second for testing)
-            decision = await asyncio.wait_for(future, timeout=1.0)
+            # Wait for decision with timeout (60 seconds for user interaction)
+            decision = await asyncio.wait_for(future, timeout=60.0)
             return decision
         except asyncio.TimeoutError:
             # Auto-reject on timeout
@@ -156,6 +156,14 @@ class ApprovalBridge:
             # Clean up
             if request_id in self._pending_approvals:
                 del self._pending_approvals[request_id]
+
+    def start_approval(self, action_request: dict[str, Any]) -> str:
+        """Start an approval request and return the request ID."""
+        request_id = str(uuid4())
+        future = asyncio.Future()
+        self._pending_approvals[request_id] = future
+        # In a real implementation, this would trigger the TUI dialog
+        return request_id
 
     def _extract_action_request(
         self, interrupt: dict[str, Any]

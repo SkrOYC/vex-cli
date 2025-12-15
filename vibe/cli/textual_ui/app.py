@@ -111,6 +111,7 @@ class VibeApp(App):
 
         self._loading_widget: LoadingWidget | None = None
         self._pending_approval: asyncio.Future | None = None
+        self._current_request_id: str | None = None
 
         self.event_handler: EventHandler | None = None
         self.commands = CommandRegistry()
@@ -231,9 +232,10 @@ class VibeApp(App):
     async def on_approval_app_approval_granted(
         self, message: ApprovalApp.ApprovalGranted
     ) -> None:
-        if isinstance(self.agent, VibeEngine):
+        if isinstance(self.agent, VibeEngine) and self._current_request_id:
             # DeepAgents flow
-            await self.agent.handle_approval(True, None)
+            await self.agent.handle_approval(True, self._current_request_id, None)
+            self._current_request_id = None
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
@@ -247,9 +249,10 @@ class VibeApp(App):
             message.tool_name, save_permanently=message.save_permanently
         )
 
-        if isinstance(self.agent, VibeEngine):
+        if isinstance(self.agent, VibeEngine) and self._current_request_id:
             # DeepAgents flow
-            await self.agent.handle_approval(True, None)
+            await self.agent.handle_approval(True, self._current_request_id, None)
+            self._current_request_id = None
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
@@ -263,9 +266,10 @@ class VibeApp(App):
             get_user_cancellation_message(CancellationReason.OPERATION_CANCELLED)
         )
 
-        if isinstance(self.agent, VibeEngine):
+        if isinstance(self.agent, VibeEngine) and self._current_request_id:
             # DeepAgents flow
-            await self.agent.handle_approval(False, feedback)
+            await self.agent.handle_approval(False, self._current_request_id, feedback)
+            self._current_request_id = None
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.NO, feedback))
@@ -510,6 +514,12 @@ class VibeApp(App):
                 "args": interrupt_data.get("args", {}),
                 "description": interrupt_data.get("description", ""),
             }
+
+        # Start approval request and get request_id
+        if isinstance(self.agent, VibeEngine) and self.agent.approval_bridge:
+            request_id = self.agent.approval_bridge.start_approval(action_request)
+            # Store request_id for later use
+            self._current_request_id = request_id
 
         # Show approval dialog
         await self._switch_to_approval_app_from_action(action_request)

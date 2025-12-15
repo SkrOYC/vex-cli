@@ -81,33 +81,21 @@ def matches_pattern(tool_name: str, args: dict[str, Any], pattern: str) -> bool:
                     return True
         except re.error:
             pass  # Invalid regex, fall through
-        return False
 
     # Glob pattern - primarily for file paths
     # Check common file path args
     file_path_args = ["path", "file_path", "filepath", "directory", "dir"]
     for arg_name in file_path_args:
         if arg_name in args and isinstance(args[arg_name], str):
-            if fnmatch.fnmatch(args[arg_name], pattern):
+            path_str = args[arg_name]
+            # Try matching against full path first
+            if fnmatch.fnmatch(path_str, pattern):
                 return True
+            # Also try matching against basename for file patterns
+            import os
 
-    # Simple string matching as fallback
-    # Check tool name
-    if pattern.lower() in tool_name.lower():
-        return True
-    # Check args values
-    for arg_value in args.values():
-        if isinstance(arg_value, str) and pattern.lower() in arg_value.lower():
-            return True
-
-    return False
-
-    # Glob pattern - primarily for file paths
-    # Check common file path args
-    file_path_args = ["path", "file_path", "filepath", "directory", "dir"]
-    for arg_name in file_path_args:
-        if arg_name in args and isinstance(args[arg_name], str):
-            if fnmatch.fnmatch(args[arg_name], pattern):
+            basename = os.path.basename(path_str)
+            if fnmatch.fnmatch(basename, pattern):
                 return True
 
     # Simple string matching as fallback
