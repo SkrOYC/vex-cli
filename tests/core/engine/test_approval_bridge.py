@@ -7,6 +7,7 @@ from vibe.core.engine.adapters import ApprovalBridge
 
 
 class TestApprovalBridge:
+    @pytest.mark.asyncio
     async def test_handle_interrupt(self):
         """Test handling of interrupts."""
         bridge = ApprovalBridge()
@@ -17,6 +18,7 @@ class TestApprovalBridge:
         result = await bridge.handle_interrupt(interrupt)
         assert result == {"approved": True}  # Placeholder for now
 
+    @pytest.mark.asyncio
     async def test_respond_without_pending(self):
         """Test responding when no pending approval."""
         bridge = ApprovalBridge()

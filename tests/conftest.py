@@ -8,6 +8,9 @@ import pytest
 import tomli_w
 
 from vibe.core import config_path
+from vibe.core.config import VibeConfig, ModelConfig, ProviderConfig, Backend
+from vibe.core.engine import VibeEngine
+from vibe.core.engine.adapters import EventTranslator
 
 
 def get_base_config() -> dict[str, Any]:
@@ -59,3 +62,42 @@ def _mock_platform(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setenv("SHELL", "/bin/sh")
+
+
+@pytest.fixture
+def deepagents_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
+    """Create test configuration for DeepAgents."""
+    # Mock the API key to avoid MissingAPIKeyError
+    monkeypatch.setenv("OPENAI_API_KEY", "mock-test-key")
+    
+    return VibeConfig(
+        active_model="test-model",  # Must match the alias
+        use_deepagents=True,
+        models=[
+            ModelConfig(
+                name="gpt-4o-mini",
+                provider="openai-compatible",
+                alias="test-model"
+            )
+        ],
+        providers=[
+            ProviderConfig(
+                name="openai-compatible",
+                api_base="https://api.openai.com/v1",
+                api_key_env_var="OPENAI_API_KEY",
+                backend=Backend.GENERIC,
+            )
+        ]
+    )
+
+
+@pytest.fixture
+def vibe_engine(deepagents_config: VibeConfig) -> VibeEngine:
+    """Create VibeEngine for testing."""
+    return VibeEngine(deepagents_config)
+
+
+@pytest.fixture
+def event_translator(deepagents_config: VibeConfig) -> EventTranslator:
+    """Create EventTranslator for testing."""
+    return EventTranslator(deepagents_config)
