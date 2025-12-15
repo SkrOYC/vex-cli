@@ -101,16 +101,9 @@ class VibeEngine:
 
     def _build_interrupt_config(self) -> dict[str, Any]:
         """Build HITL interrupt config from Vibe tool permissions."""
-        interrupt_on = {}
+        from vibe.core.engine.permissions import build_interrupt_config
 
-        # Map Vibe permissions to DeepAgents interrupts
-        for tool_name, tool_config in self.config.tools.items():
-            if tool_config.permission.name == "ASK":
-                interrupt_on[tool_name] = True
-            elif tool_config.permission.name == "NEVER":
-                interrupt_on[tool_name] = {"before": True}  # Placeholder
-
-        return interrupt_on
+        return build_interrupt_config(self.config)
 
     def _get_system_prompt(self) -> str:
         """Build system prompt from Vibe config."""
@@ -173,6 +166,41 @@ class VibeEngine:
         """Handle approval decision from TUI."""
         if self.approval_bridge:
             await self.approval_bridge.respond(approved, feedback)
+
+    async def resume_execution(self, decision: dict[str, Any]) -> None:
+        """Resume execution after approval."""
+        if self._agent is None:
+            return
+
+        config = {"configurable": {"thread_id": self._thread_id}}
+
+        # For LangGraph, we need to resume from the interrupt
+        # This is a simplified implementation - in practice, we'd need to
+        # update the state and resume the graph execution
+        try:
+            # Resume execution (this would typically be done by calling invoke with None)
+            # For now, we'll just log the decision
+            pass  # TODO: Implement proper resume logic
+        except Exception as e:
+            # Handle resume errors gracefully
+            pass
+
+    async def reject_execution(self, decision: dict[str, Any]) -> None:
+        """Reject execution and abort operation."""
+        if self._agent is None:
+            return
+
+        config = {"configurable": {"thread_id": self._thread_id}}
+
+        # For rejection, we need to update the state to indicate rejection
+        # and potentially abort the current operation
+        try:
+            # Update state with rejection
+            # This is a simplified implementation
+            pass  # TODO: Implement proper reject logic
+        except Exception as e:
+            # Handle reject errors gracefully
+            pass
 
     def reset(self) -> None:
         """Reset conversation state."""

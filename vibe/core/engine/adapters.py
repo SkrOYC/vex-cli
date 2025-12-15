@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel
 from vibe.core.config import VibeConfig
 from vibe.core.tools.base import BaseTool
 from vibe.core.tools.manager import ToolManager
-from vibe.core.types import AssistantEvent, BaseEvent, ToolCallEvent, ToolResultEvent
+from vibe.core.types import (
+    AssistantEvent,
+    BaseEvent,
+    InterruptEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 
 
 class GenericArgs(BaseModel):
@@ -58,6 +65,10 @@ class EventTranslator:
                 chunk = event_data.get("data", {}).get("chunk")
                 if chunk and hasattr(chunk, "content"):
                     return AssistantEvent(content=chunk.content)
+
+            case "interrupt":
+                # Agent interrupt requiring approval
+                return InterruptEvent(interrupt_data=event_data)
 
             case "on_tool_start":
                 # Tool call starting
@@ -114,19 +125,70 @@ class ApprovalBridge:
     """Bridge LangGraph interrupts to Vibe TUI approval flow."""
 
     def __init__(self) -> None:
-        self._pending_approval: asyncio.Future[dict[str, Any]] | None = None
+        self._pending_approvals: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
     async def handle_interrupt(self, interrupt: dict[str, Any]) -> dict[str, Any]:
         """Handle LangGraph interrupts for approval."""
-        # For skeleton implementation, return approved immediately
-        # In real implementation, this would create a Future and wait for TUI response
-        return {"approved": True}
+        # Extract ActionRequest from interrupt data
+        action_request = self._extract_action_request(interrupt)
+        if not action_request:
+            return {"approved": True}  # Auto-approve if no action request
 
-    async def respond(self, approved: bool, feedback: str | None = None) -> None:
+        # Create unique request ID
+        request_id = str(uuid4())
+
+        # Create Future for approval decision
+        future = asyncio.Future()
+        self._pending_approvals[request_id] = future
+
+        # In real implementation, this would trigger TUI dialog via callback
+        # For now, auto-approve (will be connected to TUI later)
+        try:
+            # Wait for decision with timeout (1 second for testing)
+            decision = await asyncio.wait_for(future, timeout=1.0)
+            return decision
+        except asyncio.TimeoutError:
+            # Auto-reject on timeout
+            if request_id in self._pending_approvals:
+                del self._pending_approvals[request_id]
+            return {"approved": False, "feedback": "Approval timeout"}
+        finally:
+            # Clean up
+            if request_id in self._pending_approvals:
+                del self._pending_approvals[request_id]
+
+    def _extract_action_request(
+        self, interrupt: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Extract ActionRequest from LangGraph interrupt data."""
+        # Based on the interrupt structure from docs
+        data = interrupt.get("data")
+        if data is not None:
+            action_request = data.get("action_request")
+            if action_request and isinstance(action_request, dict):
+                # Ensure all required fields are present with defaults
+                return {
+                    "name": action_request.get("name", ""),
+                    "args": action_request.get("args", {}),
+                    "description": action_request.get("description", ""),
+                }
+
+        # Fallback: try to extract from other possible structures
+        if "name" in interrupt and "args" in interrupt:
+            return {
+                "name": interrupt["name"],
+                "args": interrupt.get("args", {}),
+                "description": interrupt.get("description", ""),
+            }
+
+        return None
+
+    async def respond(
+        self, approved: bool, request_id: str, feedback: str | None = None
+    ) -> None:
         """Respond to pending approval."""
-        if self._pending_approval and not self._pending_approval.done():
-            self._pending_approval.set_result({
-                "approved": approved,
-                "feedback": feedback,
-            })
-            self._pending_approval = None
+        if request_id in self._pending_approvals:
+            future = self._pending_approvals[request_id]
+            if not future.done():
+                future.set_result({"approved": approved, "feedback": feedback})
+            del self._pending_approvals[request_id]

@@ -13,6 +13,7 @@ from vibe.core.types import (
     BaseEvent,
     CompactEndEvent,
     CompactStartEvent,
+    InterruptEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
@@ -30,12 +31,14 @@ class EventHandler:
         todo_area_callback: Callable,
         get_tools_collapsed: Callable[[], bool],
         get_todos_collapsed: Callable[[], bool],
+        interrupt_callback: Callable | None = None,
     ) -> None:
         self.mount_callback = mount_callback
         self.scroll_callback = scroll_callback
         self.todo_area_callback = todo_area_callback
         self.get_tools_collapsed = get_tools_collapsed
         self.get_todos_collapsed = get_todos_collapsed
+        self.interrupt_callback = interrupt_callback
         self.current_tool_call: ToolCallMessage | None = None
         self.current_compact: CompactMessage | None = None
         self.tool_results: list[ToolResultMessage] = []
@@ -57,6 +60,9 @@ class EventHandler:
             case AssistantEvent():
                 await self._handle_assistant_message(event)
                 return None
+            case InterruptEvent():
+                await self._handle_interrupt(event)
+                return None
             case CompactStartEvent():
                 await self._handle_compact_start()
                 return None
@@ -66,6 +72,10 @@ class EventHandler:
             case _:
                 await self._handle_unknown_event(event)
                 return None
+
+    async def _handle_interrupt(self, event: InterruptEvent) -> None:
+        if self.interrupt_callback:
+            await self.interrupt_callback(event.interrupt_data)
 
     def _sanitize_event(self, event: ToolResultEvent) -> ToolResultEvent:
         if isinstance(event, ToolResultEvent):
