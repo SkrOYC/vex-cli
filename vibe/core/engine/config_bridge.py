@@ -1,7 +1,5 @@
 """Configuration bridge to map VibeConfig to DeepAgents parameters."""
 
-from typing import Any
-
 from langchain.agents.middleware import InterruptOnConfig
 from langchain_core.language_models import BaseChatModel
 
