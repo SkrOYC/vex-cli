@@ -109,9 +109,9 @@ class DeepAgentsEngineInterface(EngineInterface):
     async def initialize(self) -> None:
         self.engine.initialize()
     
-    async def run_conversation(self, message: str) -> AsyncGenerator[BaseEvent, None]:
-        async for event in self.engine.run_with_events(message):
-            yield event
+     async def run_conversation(self, message: str) -> AsyncGenerator[BaseEvent, None]:
+         async for event in self.engine.run(message):
+             yield event
     
     async def handle_approval(self, approved: bool, feedback: str | None = None) -> None:
         await self.engine.handle_approval(approved, feedback)
