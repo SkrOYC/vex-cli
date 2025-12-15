@@ -510,10 +510,7 @@ class VibeApp(App):
             ):
                 if self._context_progress and self.agent:
                     current_state = self._context_progress.tokens
-                    if isinstance(self.agent, VibeEngine):
-                        current_tokens = self.agent.stats["context_tokens"]
-                    else:
-                        current_tokens = self.agent.stats.context_tokens
+                    current_tokens = self.agent.stats.context_tokens
                     self._context_progress.tokens = TokenState(
                         max_tokens=current_state.max_tokens,
                         current_tokens=current_tokens,
@@ -604,31 +601,16 @@ class VibeApp(App):
             return
 
         stats = self.agent.stats
-        if isinstance(self.agent, VibeEngine):
-            messages = stats.get("messages", "N/A")  # type: ignore
-            context_tokens = stats.get("context_tokens", "N/A")  # type: ignore
-            todos = len(stats.get("todos", []))  # type: ignore
-            status_text = f"""## Agent Statistics (VibeEngine)
+        engine_name = "VibeEngine" if isinstance(self.agent, VibeEngine) else "Agent"
+        status_text = f"""## Agent Statistics ({engine_name})
 
-- **Messages**: {messages}
-- **Context Tokens**: {context_tokens:,}
-- **TODOs**: {todos}
-"""
-        else:
-            steps = stats.steps  # type: ignore
-            session_prompt_tokens = stats.session_prompt_tokens  # type: ignore
-            session_completion_tokens = stats.session_completion_tokens  # type: ignore
-            session_total_llm_tokens = stats.session_total_llm_tokens  # type: ignore
-            last_turn_total_tokens = stats.last_turn_total_tokens  # type: ignore
-            session_cost = stats.session_cost  # type: ignore
-            status_text = f"""## Agent Statistics
-
-- **Steps**: {steps:,}
-- **Session Prompt Tokens**: {session_prompt_tokens:,}
-- **Session Completion Tokens**: {session_completion_tokens:,}
-- **Session Total LLM Tokens**: {session_total_llm_tokens:,}
-- **Last Turn Tokens**: {last_turn_total_tokens:,}
-- **Cost**: ${session_cost:.4f}
+- **Steps**: {stats.steps:,}
+- **Session Prompt Tokens**: {stats.session_prompt_tokens:,}
+- **Session Completion Tokens**: {stats.session_completion_tokens:,}
+- **Session Total LLM Tokens**: {stats.session_total_llm_tokens:,}
+- **Last Turn Tokens**: {stats.last_turn_total_tokens:,}
+- **Context Tokens**: {stats.context_tokens:,}
+- **Cost**: ${stats.session_cost:.4f}
 """
         await self._mount_and_scroll(UserCommandMessage(status_text))
 
@@ -693,10 +675,7 @@ class VibeApp(App):
 
             if self._context_progress and self.agent:
                 current_state = self._context_progress.tokens
-                if isinstance(self.agent, VibeEngine):
-                    current_tokens = self.agent.stats["context_tokens"]
-                else:
-                    current_tokens = self.agent.stats.context_tokens
+                current_tokens = self.agent.stats.context_tokens
                 self._context_progress.tokens = TokenState(
                     max_tokens=current_state.max_tokens, current_tokens=current_tokens
                 )
@@ -723,26 +702,20 @@ class VibeApp(App):
             )
             return
 
-        if isinstance(self.agent, VibeEngine):
-            await self._mount_and_scroll(
-                ErrorMessage(
-                    "Log path not available for VibeEngine.",
-                    collapsed=self._tools_collapsed,
-                )
-            )
-            return
-
-        if not self.agent.interaction_logger.enabled:
-            await self._mount_and_scroll(
-                ErrorMessage(
-                    "Session logging is disabled in configuration.",
-                    collapsed=self._tools_collapsed,
-                )
-            )
-            return
-
         try:
-            log_path = str(self.agent.interaction_logger.filepath)
+            log_path = (
+                self.agent.get_log_path()
+                if hasattr(self.agent, "get_log_path")
+                else None
+            )
+            if log_path is None:
+                await self._mount_and_scroll(
+                    ErrorMessage(
+                        "Log path not available or session logging is disabled.",
+                        collapsed=self._tools_collapsed,
+                    )
+                )
+                return
             await self._mount_and_scroll(
                 UserCommandMessage(
                     f"## Current Log File Path\n\n`{log_path}`\n\nYou can send this file to share your interaction."
@@ -774,7 +747,15 @@ class VibeApp(App):
             )
             return
 
-        if len(self.agent.messages) <= 1:
+        # Check if there's enough history to compact
+        # For VibeEngine, we check via stats, for legacy agent via messages
+        has_history = False
+        if isinstance(self.agent, VibeEngine):
+            has_history = self.agent.stats.steps > 0
+        else:
+            has_history = len(self.agent.messages) > 1
+
+        if not has_history:
             await self._mount_and_scroll(
                 ErrorMessage(
                     "No conversation history to compact yet.",
@@ -786,16 +767,7 @@ class VibeApp(App):
         if not self.agent or not self.event_handler:
             return
 
-        if isinstance(self.agent, VibeEngine):
-            await self._mount_and_scroll(
-                ErrorMessage(
-                    "History compaction not available for VibeEngine.",
-                    collapsed=self._tools_collapsed,
-                )
-            )
-            return
-
-        old_tokens = self.agent.stats.context_tokens  # type: ignore
+        old_tokens = self.agent.stats.context_tokens
         compact_msg = CompactMessage()
         self.event_handler.current_compact = compact_msg
         await self._mount_and_scroll(compact_msg)
