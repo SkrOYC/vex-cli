@@ -206,17 +206,26 @@ class StreamAdapter:
     def __init__(self, agent: CompiledStateGraph):
         self.agent = agent
     
-    async def run_with_events(
-        self, 
-        inputs: dict[str, Any], 
-        config: dict[str, Any]
-    ) -> AsyncGenerator[BaseEvent, None]:
-        """Run agent and yield translated events."""
-        
-        async for event in self.agent.astream_events(inputs, config, version="v2"):
-            translated = EventTranslator.translate(event)
-            if translated is not None:
-                yield translated
+     async def run(self, user_message: str) -> AsyncGenerator["BaseEvent", None]:
+         """Run a conversation turn, yielding events for the TUI."""
+         if self._agent is None:
+             self.initialize()
+
+         config = {
+             "configurable": {"thread_id": self._thread_id},
+             "recursion_limit": 1000,
+         }
+
+         # Stream events from the agent - handle the correct event format
+         async for event in self._agent.astream_events(
+             {"messages": [("user", user_message)]},
+             config=config,
+             version="v2",
+         ):
+             # Translate DeepAgents events to Vibe TUI events
+             translated = self.event_translator.translate(event)
+             if translated is not None:
+                 yield translated
 ```
 
 ### Phase 2: TUI Integration
@@ -351,14 +360,27 @@ class EventTranslator:
 ```python
 # vibe/core/engine/engine.py
 
-class VibeEngine:
-    async def run_with_events(self, user_message: str):
-        try:
-            async for event in self._stream_events(user_message):
-                yield event
-        except Exception as e:
-            # Yield error event
-            yield ErrorEvent(message=f"Engine error: {e}")
+ class VibeEngine:
+     async def run(self, user_message: str) -> AsyncGenerator["BaseEvent", None]:
+         """Run a conversation turn, yielding events for the TUI."""
+         if self._agent is None:
+             self.initialize()
+
+         config = {
+             "configurable": {"thread_id": self._thread_id},
+             "recursion_limit": 1000,
+         }
+
+         # Stream events from the agent - handle the correct event format
+         async for event in self._agent.astream_events(
+             {"messages": [("user", user_message)]},
+             config=config,
+             version="v2",
+         ):
+             # Translate DeepAgents events to Vibe TUI events
+             translated = self.event_translator.translate(event)
+             if translated is not None:
+                 yield translated
 ```
 
 ## Performance Considerations
