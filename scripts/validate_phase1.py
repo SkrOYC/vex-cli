@@ -1,37 +1,52 @@
 #!/usr/bin/env python3
 """Validation script for DeepAgents Phase 1 completion."""
 
+import asyncio
+import os
 import sys
 from typing import Tuple
-from vibe.core.config import VibeConfig
+
+# Standard library imports
+
+# Third-party imports
+import deepagents
+from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph.state import CompiledStateGraph
+
+# Local imports
+from vibe.core.config import (
+    Backend, 
+    BaseToolConfig, 
+    ModelConfig, 
+    ProviderConfig, 
+    VibeConfig
+)
 from vibe.core.engine import VibeEngine
 from vibe.core.engine.adapters import EventTranslator, ApprovalBridge
 from vibe.core.engine.config_bridge import DeepAgentsConfig
 from vibe.core.engine.tools import VibeToolAdapter
+from vibe.core.tools.base import ToolPermission
 
 
 def validate_dependencies() -> Tuple[bool, str]:
     """Validate DeepAgents dependencies are compatible."""
     try:
-        # Try to import core DeepAgents components
-        import deepagents
-        from deepagents import create_deep_agent
-        from deepagents.backends import FilesystemBackend
-        from langgraph.checkpoint.memory import InMemorySaver
-        from langgraph.graph.state import CompiledStateGraph
+        # Try to import core DeepAgents components that are already imported at the top
+        # This function just confirms they can be imported
+        _ = create_deep_agent
+        _ = FilesystemBackend
+        _ = InMemorySaver
+        _ = CompiledStateGraph
         return True, "Dependencies OK"
-    except ImportError as e:
-        return False, f"Dependency error: {e}"
     except Exception as e:
-        return False, f"Unexpected error during import: {e}"
+        return False, f"Dependency error: {e}"
 
 
 def validate_engine_initialization() -> Tuple[bool, str]:
     """Validate VibeEngine can be initialized."""
     try:
-        import os
-        from vibe.core.config import ModelConfig, ProviderConfig, Backend
-        
         # Set a mock API key to avoid the missing API key error
         os.environ["TEST_API_KEY"] = "mock-test-key"
         
@@ -71,10 +86,6 @@ def validate_engine_initialization() -> Tuple[bool, str]:
 def validate_config_bridge() -> Tuple[bool, str]:
     """Validate DeepAgentsConfig bridge functionality."""
     try:
-        import os
-        from vibe.core.config import BaseToolConfig, ModelConfig, ProviderConfig, Backend
-        from vibe.core.tools.base import ToolPermission
-        
         # Set a mock API key to avoid the missing API key error
         os.environ["TEST_API_KEY"] = "mock-test-key"
         
@@ -111,9 +122,9 @@ def validate_config_bridge() -> Tuple[bool, str]:
         try:
             model = DeepAgentsConfig.create_model(config)
             assert model is not None
-        except Exception:
+        except Exception as e:
             # Model creation might require actual API access, so we'll allow this to fail in some environments
-            pass
+            print(f"    - Warning: Model creation validation skipped: {e}")
         
         # Test backend creation
         backend = DeepAgentsConfig.create_backend(config)
@@ -127,9 +138,6 @@ def validate_config_bridge() -> Tuple[bool, str]:
 def validate_event_translator() -> Tuple[bool, str]:
     """Validate EventTranslator functionality."""
     try:
-        import os
-        from vibe.core.config import ModelConfig, ProviderConfig, Backend
-        
         # Set a mock API key to avoid the missing API key error
         os.environ["TEST_API_KEY"] = "mock-test-key"
         
@@ -175,8 +183,6 @@ def validate_approval_bridge() -> Tuple[bool, str]:
         assert bridge._pending_approval is None
         
         # Test basic functionality
-        import asyncio
-        
         async def test_handle_interrupt():
             result = await bridge.handle_interrupt({"type": "test", "data": {}})
             return result
@@ -193,9 +199,6 @@ def validate_approval_bridge() -> Tuple[bool, str]:
 def validate_tool_adapter() -> Tuple[bool, str]:
     """Validate VibeToolAdapter functionality."""
     try:
-        import os
-        from vibe.core.config import ModelConfig, ProviderConfig, Backend
-        
         # Set a mock API key to avoid the missing API key error
         os.environ["TEST_API_KEY"] = "mock-test-key"
         

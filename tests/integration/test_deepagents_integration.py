@@ -3,7 +3,6 @@
 import pytest
 from vibe.core.config import VibeConfig
 from vibe.core.engine import VibeEngine
-from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
 
 
 class TestDeepAgentsIntegration:
@@ -50,14 +49,3 @@ class TestDeepAgentsIntegration:
         # After reset, agent should be None (will be reinitialized on next use)
         assert engine._agent is None
     
-    @pytest.mark.asyncio
-    async def test_event_translator_integration(self, deepagents_config: VibeConfig):
-        """Test EventTranslator integration."""
-        from vibe.core.engine.adapters import EventTranslator
-        
-        translator = EventTranslator(deepagents_config)
-        
-        # Test with a simple known event
-        event = {"event": "unknown", "data": {}}
-        result = translator.translate(event)
-        assert result is None  # Unknown events should return None

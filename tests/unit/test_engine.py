@@ -36,12 +36,12 @@ class TestVibeEngine:
         engine.initialize()
         
         initial_thread_id = engine._thread_id
-        initial_agent = engine._agent
-        
+
         engine.reset()
         
         # After reset, agent should be None and will be reinitialized on next use
         assert engine._agent is None
+        assert engine._thread_id != initial_thread_id
         
     def test_stats_property(self, deepagents_config: VibeConfig):
         """Test stats property returns expected structure."""
