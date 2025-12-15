@@ -105,7 +105,7 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core - DeepAgents
-    "deepagents>=0.1.0",
+    "deepagents>=0.3.0",
     "langchain-mistralai>=0.2.0",
     
     # TUI - Preserved
