@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import (
     BaseModel,
@@ -32,6 +32,36 @@ class ResumeSessionInfo:
             case "resume":
                 action = "Resuming"
         return f"{action} session `{self.session_id}` from {self.session_time}"
+
+
+class AgentStatsProtocol(Protocol):
+    """Protocol defining the interface for agent statistics."""
+
+    steps: int
+    session_prompt_tokens: int
+    session_completion_tokens: int
+    tool_calls_agreed: int
+    tool_calls_rejected: int
+    tool_calls_failed: int
+    tool_calls_succeeded: int
+    context_tokens: int
+    last_turn_prompt_tokens: int
+    last_turn_completion_tokens: int
+    last_turn_duration: float
+    tokens_per_second: float
+    input_price_per_million: float
+    output_price_per_million: float
+
+    @property
+    def session_total_llm_tokens(self) -> int: ...
+
+    @property
+    def last_turn_total_tokens(self) -> int: ...
+
+    @property
+    def session_cost(self) -> float: ...
+
+    def update_pricing(self, input_price: float, output_price: float) -> None: ...
 
 
 class AgentStats(BaseModel):

@@ -14,11 +14,13 @@ from vibe.core.types import AssistantEvent, BaseEvent, ToolCallEvent, ToolResult
 
 class GenericArgs(BaseModel):
     """Generic args fallback."""
+
     args: dict = {}
 
 
 class GenericResult(BaseModel):
     """Generic result fallback."""
+
     output: str = ""
 
 
@@ -29,7 +31,9 @@ class EventTranslator:
         self.config = config
         self.tool_manager = ToolManager(config)
 
-    def _get_tool_info(self, tool_name: str) -> tuple[type[BaseTool] | None, type[BaseModel] | None]:
+    def _get_tool_info(
+        self, tool_name: str
+    ) -> tuple[type[BaseTool] | None, type[BaseModel] | None]:
         """Get tool class and args model for a tool name."""
         try:
             tool_instance = self.tool_manager.get(tool_name)
@@ -39,21 +43,26 @@ class EventTranslator:
         except Exception:
             return None, None
 
-    def translate(self, event: dict[str, Any]) -> BaseEvent | None:
-        """Translate a single LangGraph event to Vibe event."""
-        event_type = event.get("event")
+    def translate(self, event: dict[str, Any] | Any) -> BaseEvent | None:
+        """Translate a single LangGraph event to Vibe TUI events."""
+        # Handle both dict and StreamEvent objects
+        if not isinstance(event, dict):
+            event_data = event.__dict__ if hasattr(event, "__dict__") else {}
+        else:
+            event_data = event
+        event_type = event_data.get("event")
 
         match event_type:
             case "on_chat_model_stream":
                 # Streaming token
-                chunk = event.get("data", {}).get("chunk")
+                chunk = event_data.get("data", {}).get("chunk")
                 if chunk and hasattr(chunk, "content"):
                     return AssistantEvent(content=chunk.content)
 
             case "on_tool_start":
                 # Tool call starting
-                tool_name = event.get("name", "")
-                tool_args = event.get("data", {}).get("input", {})
+                tool_name = event_data.get("name", "")
+                tool_args = event_data.get("data", {}).get("input", {})
 
                 tool_class, args_model = self._get_tool_info(tool_name)
                 if tool_class and args_model:
@@ -71,13 +80,13 @@ class EventTranslator:
                     tool_name=tool_name,
                     tool_class=tool_class,  # type: ignore
                     args=args,
-                    tool_call_id=event.get("run_id", "")
+                    tool_call_id=event_data.get("run_id", ""),
                 )
 
             case "on_tool_end":
                 # Tool call complete
-                tool_name = event.get("name", "")
-                tool_result = event.get("data", {}).get("output", "")
+                tool_name = event_data.get("name", "")
+                tool_result = event_data.get("data", {}).get("output", "")
 
                 tool_class, _ = self._get_tool_info(tool_name)
                 if tool_class:
@@ -95,7 +104,7 @@ class EventTranslator:
                     tool_name=tool_name,
                     tool_class=tool_class,  # type: ignore
                     result=result,
-                    tool_call_id=event.get("run_id", "")
+                    tool_call_id=event_data.get("run_id", ""),
                 )
 
         return None
@@ -116,5 +125,8 @@ class ApprovalBridge:
     async def respond(self, approved: bool, feedback: str | None = None) -> None:
         """Respond to pending approval."""
         if self._pending_approval and not self._pending_approval.done():
-            self._pending_approval.set_result({"approved": approved, "feedback": feedback})
+            self._pending_approval.set_result({
+                "approved": approved,
+                "feedback": feedback,
+            })
             self._pending_approval = None
