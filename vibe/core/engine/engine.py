@@ -152,7 +152,7 @@ class VibeEngine:
         # Stream events from the agent - handle the correct event format
         async for event in self._agent.astream_events(  # type: ignore
             {"messages": messages},
-            config=config,
+            config=config,  # type: ignore
             version="v2",  # type: ignore
         ):
             # Translate DeepAgents events to Vibe TUI events
@@ -174,15 +174,13 @@ class VibeEngine:
 
         config = {"configurable": {"thread_id": self._thread_id}}
 
-        # For LangGraph, we need to resume from the interrupt
-        # This is a simplified implementation - in practice, we'd need to
-        # update the state and resume the graph execution
+        # For LangGraph, resume execution from interrupt by calling invoke with None
         try:
-            # Resume execution (this would typically be done by calling invoke with None)
-            # For now, we'll just log the decision
-            pass  # TODO: Implement proper resume logic
+            # Resume the agent execution from the interrupt point
+            self._agent.invoke(None, config)  # type: ignore
         except Exception as e:
             # Handle resume errors gracefully
+            # In a production system, you might want to log this error
             pass
 
     async def reject_execution(self, decision: dict[str, Any]) -> None:
@@ -192,14 +190,25 @@ class VibeEngine:
 
         config = {"configurable": {"thread_id": self._thread_id}}
 
-        # For rejection, we need to update the state to indicate rejection
-        # and potentially abort the current operation
+        # For rejection, update the state with a rejection message
         try:
-            # Update state with rejection
-            # This is a simplified implementation
-            pass  # TODO: Implement proper reject logic
+            from langchain_core.messages import HumanMessage
+
+            # Add a rejection message to the conversation
+            feedback = decision.get("feedback", "Operation rejected by user")
+            rejection_message = HumanMessage(
+                content=f"I reject this operation: {feedback}"
+            )
+
+            # Update the state with the rejection
+            self._agent.update_state(  # type: ignore
+                config,  # type: ignore
+                {"messages": [rejection_message]},
+                as_node="human",  # Update as if from human node
+            )
         except Exception as e:
             # Handle reject errors gracefully
+            # In a production system, you might want to log this error
             pass
 
     def reset(self) -> None:

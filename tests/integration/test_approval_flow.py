@@ -70,8 +70,26 @@ class TestApprovalFlow:
         )
 
     @pytest.mark.asyncio
-    async def test_resume_execution_placeholder(self):
-        """Test resume_execution method exists and runs without error."""
+    async def test_resume_execution_with_agent(self):
+        """Test resume_execution calls agent.invoke when agent exists."""
+        config = VibeConfig()
+        engine = VibeEngine(config=config)
+
+        # Mock agent
+        mock_agent = MagicMock()
+        engine._agent = mock_agent
+        engine._thread_id = "test-thread"
+
+        await engine.resume_execution({"approved": True})
+
+        # Should call invoke with None and correct config
+        mock_agent.invoke.assert_called_once_with(
+            None, {"configurable": {"thread_id": "test-thread"}}
+        )
+
+    @pytest.mark.asyncio
+    async def test_resume_execution_no_agent(self):
+        """Test resume_execution does nothing when no agent."""
         config = VibeConfig()
         engine = VibeEngine(config=config)
 
@@ -79,8 +97,35 @@ class TestApprovalFlow:
         await engine.resume_execution({"approved": True})
 
     @pytest.mark.asyncio
-    async def test_reject_execution_placeholder(self):
-        """Test reject_execution method exists and runs without error."""
+    async def test_reject_execution_with_agent(self):
+        """Test reject_execution updates agent state with rejection message."""
+        config = VibeConfig()
+        engine = VibeEngine(config=config)
+
+        # Mock agent
+        mock_agent = MagicMock()
+        engine._agent = mock_agent
+        engine._thread_id = "test-thread"
+
+        await engine.reject_execution({
+            "approved": False,
+            "feedback": "Operation rejected",
+        })
+
+        # Should call update_state with rejection message
+        mock_agent.update_state.assert_called_once()
+        call_args = mock_agent.update_state.call_args
+        assert call_args[0][0] == {
+            "configurable": {"thread_id": "test-thread"}
+        }  # config
+        assert "messages" in call_args[0][1]  # state update
+        assert len(call_args[0][1]["messages"]) == 1
+        assert "Operation rejected" in call_args[0][1]["messages"][0].content
+        assert call_args[1]["as_node"] == "human"  # as_node keyword argument
+
+    @pytest.mark.asyncio
+    async def test_reject_execution_no_agent(self):
+        """Test reject_execution does nothing when no agent."""
         config = VibeConfig()
         engine = VibeEngine(config=config)
 
