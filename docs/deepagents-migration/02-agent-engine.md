@@ -53,6 +53,7 @@ class Agent:
 
 from collections.abc import AsyncGenerator
 from typing import Any
+from uuid import uuid4
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend

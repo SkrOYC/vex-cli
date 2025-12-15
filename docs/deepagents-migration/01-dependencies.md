@@ -10,7 +10,7 @@ This document outlines the dependency changes required to adopt DeepAgents as th
 
 ```toml
 [project.dependencies]
-deepagents = "^0.1.0"  # Core agent engine
+deepagents = ">=0.3.0"  # Core agent engine
 langchain = "^0.3.0"   # Required by DeepAgents
 langgraph = "^0.2.0"   # Graph-based agent execution
 langchain-anthropic = "^0.3.0"  # For Anthropic models (optional)
