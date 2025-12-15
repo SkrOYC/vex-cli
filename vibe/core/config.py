@@ -332,6 +332,8 @@ class VibeConfig(BaseSettings):
         ),
     )
 
+    use_deepagents: bool = Field(default=False, env="VIBE_USE_DEEPAGENTS")
+
     model_config = SettingsConfigDict(
         env_prefix="VIBE_", case_sensitive=False, extra="ignore"
     )

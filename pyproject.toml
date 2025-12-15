@@ -41,6 +41,9 @@ dependencies = [
     "textual>=1.0.0",
     "tomli-w>=1.2.0",
     "watchfiles>=1.1.1",
+    "deepagents>=0.3.0",
+    "langchain-mistralai>=0.2.0",
+    "langchain-openai>=1.1.0",
     "pyperclip>=1.11.0",
     "textual-speedups>=0.2.1",
 ]
