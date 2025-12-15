@@ -23,7 +23,10 @@ class VibeEngine:
     """Thin wrapper around DeepAgents for TUI integration."""
 
     def __init__(
-        self, config: VibeConfig, approval_callback: ApprovalBridge | None = None
+        self,
+        config: VibeConfig,
+        approval_callback: ApprovalBridge | None = None,
+        initial_messages: list[LLMMessage] | None = None,
     ) -> None:
         self.config = config
         self.approval_bridge = approval_callback
@@ -89,14 +92,19 @@ class VibeEngine:
             "recursion_limit": 1000,
         }
 
+        # Prepare messages: convert initial to tuples + new message
+        messages = [(msg.role.value, msg.content) for msg in self.initial_messages] + [
+            ("user", user_message)
+        ]
+
         # Stream events from the agent - handle the correct event format
         async for event in self._agent.astream_events(  # type: ignore
-            {"messages": [("user", user_message)]},
-            config=config,
-            version="v2",  # type: ignore[attr]
+            {"messages": messages},
+            config=config,  # type: ignore
+            version="v2",
         ):
             # Translate DeepAgents events to Vibe TUI events
-            translated = self.event_translator.translate(event.__dict__)  # type: ignore
+            translated = self.event_translator.translate(event)
             if translated is not None:
                 yield translated
 

@@ -422,7 +422,11 @@ class VibeApp(App):
                 from vibe.core.engine.adapters import ApprovalBridge
 
                 approval_bridge = ApprovalBridge()
-                agent = VibeEngine(self.config, approval_callback=approval_bridge)
+                agent = VibeEngine(
+                    self.config,
+                    approval_callback=approval_bridge,
+                    initial_messages=self._loaded_messages,
+                )
             else:
                 agent = Agent(
                     self.config,
@@ -506,10 +510,10 @@ class VibeApp(App):
             ):
                 if self._context_progress and self.agent:
                     current_state = self._context_progress.tokens
-                if isinstance(self.agent, VibeEngine):
-                    current_tokens = self.agent.stats["context_tokens"]
-                else:
-                    current_tokens = self.agent.stats.context_tokens
+                    if isinstance(self.agent, VibeEngine):
+                        current_tokens = self.agent.stats["context_tokens"]
+                    else:
+                        current_tokens = self.agent.stats.context_tokens
                     self._context_progress.tokens = TokenState(
                         max_tokens=current_state.max_tokens,
                         current_tokens=current_tokens,
@@ -600,7 +604,32 @@ class VibeApp(App):
             return
 
         stats = self.agent.stats
-        status_text = "## Agent Statistics\n\n- **Stats**: Available"
+        if isinstance(self.agent, VibeEngine):
+            messages = stats.get("messages", "N/A")  # type: ignore
+            context_tokens = stats.get("context_tokens", "N/A")  # type: ignore
+            todos = len(stats.get("todos", []))  # type: ignore
+            status_text = f"""## Agent Statistics (VibeEngine)
+
+- **Messages**: {messages}
+- **Context Tokens**: {context_tokens:,}
+- **TODOs**: {todos}
+"""
+        else:
+            steps = stats.steps  # type: ignore
+            session_prompt_tokens = stats.session_prompt_tokens  # type: ignore
+            session_completion_tokens = stats.session_completion_tokens  # type: ignore
+            session_total_llm_tokens = stats.session_total_llm_tokens  # type: ignore
+            last_turn_total_tokens = stats.last_turn_total_tokens  # type: ignore
+            session_cost = stats.session_cost  # type: ignore
+            status_text = f"""## Agent Statistics
+
+- **Steps**: {steps:,}
+- **Session Prompt Tokens**: {session_prompt_tokens:,}
+- **Session Completion Tokens**: {session_completion_tokens:,}
+- **Session Total LLM Tokens**: {session_total_llm_tokens:,}
+- **Last Turn Tokens**: {last_turn_total_tokens:,}
+- **Cost**: ${session_cost:.4f}
+"""
         await self._mount_and_scroll(UserCommandMessage(status_text))
 
     async def _show_config(self) -> None:
@@ -766,20 +795,14 @@ class VibeApp(App):
             )
             return
 
-        if isinstance(self.agent, VibeEngine):
-            old_tokens = self.agent.stats["context_tokens"]  # type: ignore
-        else:
-            old_tokens = self.agent.stats.context_tokens  # type: ignore
+        old_tokens = self.agent.stats.context_tokens  # type: ignore
         compact_msg = CompactMessage()
         self.event_handler.current_compact = compact_msg
         await self._mount_and_scroll(compact_msg)
 
         try:
             await self.agent.compact()
-            if isinstance(self.agent, VibeEngine):
-                new_tokens = self.agent.stats["context_tokens"]  # type: ignore
-            else:
-                new_tokens = self.agent.stats.context_tokens  # type: ignore
+            new_tokens = self.agent.stats.context_tokens  # type: ignore
             compact_msg.set_complete(old_tokens=old_tokens, new_tokens=new_tokens)
             self.event_handler.current_compact = None
 

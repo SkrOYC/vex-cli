@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 
 from vibe.core.config import VibeConfig
 from vibe.cli.textual_ui.app import VibeApp
+from vibe.core.engine import VibeEngine
+from vibe.core.agent import Agent
 
 
 class TestTuiVibeEngineIntegration:
@@ -37,24 +39,26 @@ class TestTuiVibeEngineIntegration:
         app = VibeApp(config=legacy_config)
         assert app.config.use_deepagents is False
 
-    @patch("vibe.cli.textual_ui.app.VibeEngine")
-    def test_agent_initialization_deepagents(
-        self, mock_vibe_engine, deepagents_config: VibeConfig
-    ):
+    @pytest.mark.asyncio
+    async def test_agent_initialization_deepagents(self, deepagents_config: VibeConfig):
         """Test that VibeEngine is created when use_deepagents=True."""
         app = VibeApp(config=deepagents_config)
-        # Trigger initialization
-        app._ensure_agent_init_task()
-        # Since it's async, we can't easily test, but the import and conditional is there
+        await app._initialize_agent()
+        assert isinstance(app.agent, VibeEngine)
 
-    @patch("vibe.cli.textual_ui.app.Agent")
-    def test_agent_initialization_legacy(self, mock_agent, legacy_config: VibeConfig):
+    @pytest.mark.asyncio
+    async def test_agent_initialization_legacy(self, legacy_config: VibeConfig):
         """Test that Agent is created when use_deepagents=False."""
         app = VibeApp(config=legacy_config)
-        # Similar issue with async
+        await app._initialize_agent()
+        assert isinstance(app.agent, Agent)
 
-    def test_event_stream_connection(self, deepagents_config: VibeConfig):
-        """Test that event stream is connected properly."""
-        # This would require mocking the event loop and testing the async for
-        # For now, the code structure is in place
-        pass
+    @pytest.mark.asyncio
+    async def test_event_stream_connection(self, deepagents_config: VibeConfig):
+        """Test that event stream connection works for VibeEngine."""
+        app = VibeApp(config=deepagents_config)
+        await app._initialize_agent()
+        assert isinstance(app.agent, VibeEngine)
+        # Test that run method exists and is callable
+        assert hasattr(app.agent, "run")
+        assert callable(app.agent.run)
