@@ -90,11 +90,13 @@ class VibeEngine:
         }
 
         # Stream events from the agent - handle the correct event format
-        async for event in self._agent.astream_events(
-            {"messages": [("user", user_message)]}, config=config, version="v2"
+        async for event in self._agent.astream_events(  # type: ignore
+            {"messages": [("user", user_message)]},
+            config=config,
+            version="v2",  # type: ignore[attr]
         ):
             # Translate DeepAgents events to Vibe TUI events
-            translated = self.event_translator.translate(event)
+            translated = self.event_translator.translate(event.__dict__)  # type: ignore
             if translated is not None:
                 yield translated
 
@@ -130,15 +132,15 @@ class VibeEngine:
     def _estimate_tokens(self, messages: list) -> int:
         """Estimate token count from messages using actual token metadata if available."""
         total_tokens = 0
-        
+
         # Try to use actual token usage metadata from messages if available
         for msg in messages:
             # Check if the message has usage metadata (available in newer LangChain versions)
-            if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
+            if hasattr(msg, "usage_metadata") and msg.usage_metadata:
                 usage = msg.usage_metadata
                 # Add both input and output tokens if available
-                total_tokens += usage.get('input_tokens', 0)
-                total_tokens += usage.get('output_tokens', 0)
+                total_tokens += usage.get("input_tokens", 0)
+                total_tokens += usage.get("output_tokens", 0)
             # If no usage metadata, fall back to character-based estimation
             elif hasattr(msg, "content"):
                 content = msg.content

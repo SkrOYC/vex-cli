@@ -44,6 +44,7 @@ from vibe.cli.update_notifier import (
 )
 from vibe.core import __version__ as CORE_VERSION
 from vibe.core.agent import Agent
+from vibe.core.engine import VibeEngine
 from vibe.core.autocompletion.path_prompt_adapter import render_path_prompt
 from vibe.core.config import VibeConfig
 from vibe.core.config_path import HISTORY_FILE
@@ -96,7 +97,7 @@ class VibeApp(App):
         self.config = config
         self.auto_approve = auto_approve
         self.enable_streaming = enable_streaming
-        self.agent: Agent | None = None
+        self.agent: Agent | VibeEngine | None = None
         self._agent_running = False
         self._agent_initializing = False
         self._interrupt_requested = False
@@ -417,25 +418,32 @@ class VibeApp(App):
 
         self._agent_initializing = True
         try:
-            agent = Agent(
-                self.config,
-                auto_approve=self.auto_approve,
-                enable_streaming=self.enable_streaming,
-            )
+            if self.config.use_deepagents:
+                from vibe.core.engine.adapters import ApprovalBridge
 
-            if not self.auto_approve:
-                agent.approval_callback = self._approval_callback
-
-            if self._loaded_messages:
-                non_system_messages = [
-                    msg
-                    for msg in self._loaded_messages
-                    if not (msg.role == Role.system)
-                ]
-                agent.messages.extend(non_system_messages)
-                logger.info(
-                    "Loaded %d messages from previous session", len(non_system_messages)
+                approval_bridge = ApprovalBridge()
+                agent = VibeEngine(self.config, approval_callback=approval_bridge)
+            else:
+                agent = Agent(
+                    self.config,
+                    auto_approve=self.auto_approve,
+                    enable_streaming=self.enable_streaming,
                 )
+
+                if not self.auto_approve:
+                    agent.approval_callback = self._approval_callback
+
+                if self._loaded_messages:
+                    non_system_messages = [
+                        msg
+                        for msg in self._loaded_messages
+                        if not (msg.role == Role.system)
+                    ]
+                    agent.messages.extend(non_system_messages)
+                    logger.info(
+                        "Loaded %d messages from previous session",
+                        len(non_system_messages),
+                    )
 
             self.agent = agent
         except asyncio.CancelledError:
@@ -491,12 +499,20 @@ class VibeApp(App):
             rendered_prompt = render_path_prompt(
                 prompt, base_dir=self.config.effective_workdir
             )
-            async for event in self.agent.act(rendered_prompt):
+            async for event in (
+                self.agent.run(rendered_prompt)
+                if isinstance(self.agent, VibeEngine)
+                else self.agent.act(rendered_prompt)
+            ):
                 if self._context_progress and self.agent:
                     current_state = self._context_progress.tokens
+                if isinstance(self.agent, VibeEngine):
+                    current_tokens = self.agent.stats["context_tokens"]
+                else:
+                    current_tokens = self.agent.stats.context_tokens
                     self._context_progress.tokens = TokenState(
                         max_tokens=current_state.max_tokens,
-                        current_tokens=self.agent.stats.context_tokens,
+                        current_tokens=current_tokens,
                     )
 
                 if self.event_handler:
@@ -584,15 +600,7 @@ class VibeApp(App):
             return
 
         stats = self.agent.stats
-        status_text = f"""## Agent Statistics
-
-- **Steps**: {stats.steps:,}
-- **Session Prompt Tokens**: {stats.session_prompt_tokens:,}
-- **Session Completion Tokens**: {stats.session_completion_tokens:,}
-- **Session Total LLM Tokens**: {stats.session_total_llm_tokens:,}
-- **Last Turn Tokens**: {stats.last_turn_total_tokens:,}
-- **Cost**: ${stats.session_cost:.4f}
-"""
+        status_text = "## Agent Statistics\n\n- **Stats**: Available"
         await self._mount_and_scroll(UserCommandMessage(status_text))
 
     async def _show_config(self) -> None:
@@ -606,7 +614,11 @@ class VibeApp(App):
             new_config = VibeConfig.load()
 
             if self.agent:
-                await self.agent.reload_with_initial_messages(config=new_config)
+                if isinstance(self.agent, VibeEngine):
+                    # VibeEngine doesn't have reload_with_initial_messages, reset instead
+                    self.agent.reset()
+                else:
+                    await self.agent.reload_with_initial_messages(config=new_config)
 
             self.config = new_config
             if self._context_progress:
@@ -652,9 +664,12 @@ class VibeApp(App):
 
             if self._context_progress and self.agent:
                 current_state = self._context_progress.tokens
+                if isinstance(self.agent, VibeEngine):
+                    current_tokens = self.agent.stats["context_tokens"]
+                else:
+                    current_tokens = self.agent.stats.context_tokens
                 self._context_progress.tokens = TokenState(
-                    max_tokens=current_state.max_tokens,
-                    current_tokens=self.agent.stats.context_tokens,
+                    max_tokens=current_state.max_tokens, current_tokens=current_tokens
                 )
             await self._mount_and_scroll(
                 UserCommandMessage("Conversation history cleared!")
@@ -674,6 +689,15 @@ class VibeApp(App):
             await self._mount_and_scroll(
                 ErrorMessage(
                     "No log file created yet. Send a message first.",
+                    collapsed=self._tools_collapsed,
+                )
+            )
+            return
+
+        if isinstance(self.agent, VibeEngine):
+            await self._mount_and_scroll(
+                ErrorMessage(
+                    "Log path not available for VibeEngine.",
                     collapsed=self._tools_collapsed,
                 )
             )
@@ -733,14 +757,29 @@ class VibeApp(App):
         if not self.agent or not self.event_handler:
             return
 
-        old_tokens = self.agent.stats.context_tokens
+        if isinstance(self.agent, VibeEngine):
+            await self._mount_and_scroll(
+                ErrorMessage(
+                    "History compaction not available for VibeEngine.",
+                    collapsed=self._tools_collapsed,
+                )
+            )
+            return
+
+        if isinstance(self.agent, VibeEngine):
+            old_tokens = self.agent.stats["context_tokens"]  # type: ignore
+        else:
+            old_tokens = self.agent.stats.context_tokens  # type: ignore
         compact_msg = CompactMessage()
         self.event_handler.current_compact = compact_msg
         await self._mount_and_scroll(compact_msg)
 
         try:
             await self.agent.compact()
-            new_tokens = self.agent.stats.context_tokens
+            if isinstance(self.agent, VibeEngine):
+                new_tokens = self.agent.stats["context_tokens"]  # type: ignore
+            else:
+                new_tokens = self.agent.stats.context_tokens  # type: ignore
             compact_msg.set_complete(old_tokens=old_tokens, new_tokens=new_tokens)
             self.event_handler.current_compact = None
 
@@ -940,7 +979,7 @@ class VibeApp(App):
         if self._chat_input_container:
             self._chat_input_container.set_show_warning(self.auto_approve)
 
-        if self.agent:
+        if self.agent and not isinstance(self.agent, VibeEngine):
             self.agent.auto_approve = self.auto_approve
 
             if self.auto_approve:
