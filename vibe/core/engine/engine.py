@@ -10,6 +10,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
+from vibe.core.types import BaseEvent
 
 from vibe.core.config import VibeConfig
 from vibe.core.engine.adapters import ApprovalBridge, EventTranslator
@@ -26,6 +27,7 @@ class VibeEngine:
     ) -> None:
         self.config = config
         self.approval_bridge = approval_callback
+        self.event_translator = EventTranslator(config)
         self._agent: CompiledStateGraph | None = None
         self._checkpointer = InMemorySaver()
         self._thread_id = "vibe-session"
@@ -34,7 +36,7 @@ class VibeEngine:
         """Create LangChain model from Vibe config."""
         # Placeholder for model creation
         # In real implementation, create ChatMistralAI or equivalent
-        return None
+        return object()  # Mock object to prevent runtime errors
 
     def _build_interrupt_config(self) -> dict[str, Any]:
         """Build HITL interrupt config from Vibe tool permissions."""
@@ -76,7 +78,7 @@ class VibeEngine:
             checkpointer=self._checkpointer,
         )
 
-    async def run(self, user_message: str) -> AsyncGenerator[Any, None]:
+    async def run(self, user_message: str) -> AsyncGenerator["BaseEvent", None]:
         """Run a conversation turn, yielding events for the TUI."""
         if self._agent is None:
             self.initialize()
@@ -93,7 +95,7 @@ class VibeEngine:
             version="v2",
         ):
             # Translate DeepAgents events to Vibe TUI events
-            translated = EventTranslator.translate(event)
+            translated = self.event_translator.translate(event)
             if translated is not None:
                 yield translated
 

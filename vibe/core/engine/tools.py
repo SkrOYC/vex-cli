@@ -66,13 +66,16 @@ class VibeToolAdapter:
             except Exception as e:
                 return f"Error executing command: {e}"
 
+        def sync_execute_bash(*args, **kwargs):
+            raise NotImplementedError("Synchronous execution not supported")
+
         return StructuredTool.from_function(
             name="bash",
             description=(
                 "Execute a bash command. Use for running scripts, "
                 "git commands, package managers, etc."
             ),
-            func=lambda *args, **kwargs: asyncio.run(execute_bash(*args, **kwargs)),
+            func=sync_execute_bash,
             coroutine=execute_bash,
         )
 
