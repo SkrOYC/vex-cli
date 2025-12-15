@@ -134,9 +134,9 @@ class TestConversationFlow:
         engine = VibeEngine(config)
         await engine.initialize()
         
-        events = []
-        async for event in engine.run_with_events("Hello"):
-            events.append(event)
+         events = []
+         async for event in engine.run("Hello"):
+             events.append(event)
         
         assert len(events) > 0
         assert any(isinstance(e, AssistantEvent) for e in events)
@@ -155,9 +155,9 @@ class TestConversationFlow:
         
         engine.approval_bridge = ApprovalBridge(callback=mock_approve)
         
-        events = []
-        async for event in engine.run_with_events("Create a file called test.txt"):
-            events.append(event)
+         events = []
+         async for event in engine.run("Create a file called test.txt"):
+             events.append(event)
         
         # Should have tool call and result events
         tool_calls = [e for e in events if isinstance(e, ToolCallEvent)]
@@ -293,9 +293,9 @@ class TestPerformance:
         
         start_time = time.time()
         
-        events = []
-        async for event in engine.run_with_events("Hello world"):
-            events.append(event)
+         events = []
+         async for event in engine.run("Hello world"):
+             events.append(event)
         
         end_time = time.time()
         duration = end_time - start_time

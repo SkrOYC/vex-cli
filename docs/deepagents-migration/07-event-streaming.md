@@ -206,17 +206,26 @@ class StreamAdapter:
     def __init__(self, agent: CompiledStateGraph):
         self.agent = agent
     
-    async def run_with_events(
-        self, 
-        inputs: dict[str, Any], 
-        config: dict[str, Any]
-    ) -> AsyncGenerator[BaseEvent, None]:
-        """Run agent and yield translated events."""
-        
-        async for event in self.agent.astream_events(inputs, config, version="v2"):
-            translated = EventTranslator.translate(event)
-            if translated is not None:
-                yield translated
+     async def run(self, user_message: str) -> AsyncGenerator["BaseEvent", None]:
+         """Run a conversation turn, yielding events for the TUI."""
+         if self._agent is None:
+             self.initialize()
+
+         config = {
+             "configurable": {"thread_id": self._thread_id},
+             "recursion_limit": 1000,
+         }
+
+         # Stream events from the agent - handle the correct event format
+         async for event in self._agent.astream_events(
+             {"messages": [("user", user_message)]},
+             config=config,
+             version="v2",
+         ):
+             # Translate DeepAgents events to Vibe TUI events
+             translated = self.event_translator.translate(event)
+             if translated is not None:
+                 yield translated
 ```
 
 ### Phase 2: TUI Integration
@@ -230,9 +239,9 @@ class VibeApp(App):
     async def run_conversation(self, user_message: str):
         """Run conversation with event streaming."""
         
-        # Get event stream from engine
-        async for event in self.engine.run_with_events(user_message):
-            await self._handle_event(event)
+         # Get event stream from engine
+         async for event in self.engine.run(user_message):
+             await self._handle_event(event)
     
     async def _handle_event(self, event: BaseEvent):
         """Handle translated events (same as before)."""
@@ -256,36 +265,29 @@ Update VibeEngine to provide event streaming:
 ```python
 # vibe/core/engine/engine.py
 
-class VibeEngine:
-    async def run_with_events(
-        self, 
-        user_message: str
-    ) -> AsyncGenerator[BaseEvent, None]:
-        """Run conversation and yield events for TUI."""
-        if self._agent is None:
-            self.initialize()
+ class VibeEngine:
+     async def run(self, user_message: str) -> AsyncGenerator[BaseEvent, None]:
+         """Run conversation and yield events for TUI."""
+         if self._agent is None:
+             self.initialize()
 
-        config = {
-            "configurable": {"thread_id": self._thread_id},
-            "recursion_limit": 1000,
-        }
+         config = {
+             "configurable": {"thread_id": self._thread_id},
+             "recursion_limit": 1000,
+         }
 
-        inputs = {"messages": [("user", user_message)]}
-        
-        # Use StreamAdapter to translate events
-        adapter = StreamAdapter(self._agent)
-        async for event in adapter.run_with_events(inputs, config):
-            yield event
-
-    async def run(self, user_message: str) -> AsyncGenerator[Any, None]:
-        """Legacy interface - yields raw LangGraph events."""
-        # For components that need raw events
-        async for event in self._agent.astream_events(
-            {"messages": [("user", user_message)]},
-            {"configurable": {"thread_id": self._thread_id}},
-            version="v2",
-        ):
-            yield event
+         inputs = {"messages": [("user", user_message)]}
+         
+         # Stream events from the agent - handle the correct event format
+         async for event in self._agent.astream_events(
+             {"messages": [("user", user_message)]},
+             config=config,
+             version="v2",
+         ):
+             # Translate DeepAgents events to Vibe TUI events
+             translated = self.event_translator.translate(event)
+             if translated is not None:
+                 yield translated
 ```
 
 ## Event Type Mapping
@@ -358,14 +360,27 @@ class EventTranslator:
 ```python
 # vibe/core/engine/engine.py
 
-class VibeEngine:
-    async def run_with_events(self, user_message: str):
-        try:
-            async for event in self._stream_events(user_message):
-                yield event
-        except Exception as e:
-            # Yield error event
-            yield ErrorEvent(message=f"Engine error: {e}")
+ class VibeEngine:
+     async def run(self, user_message: str) -> AsyncGenerator["BaseEvent", None]:
+         """Run a conversation turn, yielding events for the TUI."""
+         if self._agent is None:
+             self.initialize()
+
+         config = {
+             "configurable": {"thread_id": self._thread_id},
+             "recursion_limit": 1000,
+         }
+
+         # Stream events from the agent - handle the correct event format
+         async for event in self._agent.astream_events(
+             {"messages": [("user", user_message)]},
+             config=config,
+             version="v2",
+         ):
+             # Translate DeepAgents events to Vibe TUI events
+             translated = self.event_translator.translate(event)
+             if translated is not None:
+                 yield translated
 ```
 
 ## Performance Considerations
