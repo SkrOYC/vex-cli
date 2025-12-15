@@ -332,7 +332,10 @@ class VibeConfig(BaseSettings):
         ),
     )
 
-    use_deepagents: bool = Field(default=False, env="VIBE_USE_DEEPAGENTS")
+    use_deepagents: bool = Field(default=False)
+    enable_subagents: bool = Field(default=True)
+    enable_planning: bool = Field(default=True)
+    max_recursion_depth: int = Field(default=1000)
 
     model_config = SettingsConfigDict(
         env_prefix="VIBE_", case_sensitive=False, extra="ignore"
