@@ -14,6 +14,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from vibe.core.config import VibeConfig
 from vibe.core.engine.adapters import ApprovalBridge, EventTranslator
+from vibe.core.engine.models import create_model_from_config
 from vibe.core.engine.tools import VibeToolAdapter
 from vibe.core.types import BaseEvent
 
@@ -36,8 +37,6 @@ class VibeEngine:
 
     def _create_model(self) -> Any:
         """Create LangChain model from Vibe config."""
-        from vibe.core.engine.models import create_model_from_config
-
         return create_model_from_config(self.config)
 
     def _build_interrupt_config(self) -> dict[str, Any]:
@@ -129,22 +128,30 @@ class VibeEngine:
         }
 
     def _estimate_tokens(self, messages: list) -> int:
-        """Estimate token count from messages."""
-        # Simple estimation: ~4 chars per token on average
-        total_chars = 0
+        """Estimate token count from messages using actual token metadata if available."""
+        total_tokens = 0
+        
+        # Try to use actual token usage metadata from messages if available
         for msg in messages:
-            if hasattr(msg, "content"):
+            # Check if the message has usage metadata (available in newer LangChain versions)
+            if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
+                usage = msg.usage_metadata
+                # Add both input and output tokens if available
+                total_tokens += usage.get('input_tokens', 0)
+                total_tokens += usage.get('output_tokens', 0)
+            # If no usage metadata, fall back to character-based estimation
+            elif hasattr(msg, "content"):
                 content = msg.content
                 if isinstance(content, list):
                     # Handle list of content parts
                     for part in content:
                         if hasattr(part, "text"):
-                            total_chars += len(str(getattr(part, "text", "")))
+                            total_tokens += len(str(getattr(part, "text", ""))) // 4
                         elif isinstance(part, str):
-                            total_chars += len(part)
+                            total_tokens += len(part) // 4
                         else:
-                            total_chars += len(str(part))
+                            total_tokens += len(str(part)) // 4
                 else:
-                    total_chars += len(str(content))
+                    total_tokens += len(str(content)) // 4
 
-        return total_chars // 4  # Rough estimation
+        return total_tokens
