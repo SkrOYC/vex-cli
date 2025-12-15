@@ -101,16 +101,9 @@ class VibeEngine:
 
     def _build_interrupt_config(self) -> dict[str, Any]:
         """Build HITL interrupt config from Vibe tool permissions."""
-        interrupt_on = {}
+        from vibe.core.engine.permissions import build_interrupt_config
 
-        # Map Vibe permissions to DeepAgents interrupts
-        for tool_name, tool_config in self.config.tools.items():
-            if tool_config.permission.name == "ASK":
-                interrupt_on[tool_name] = True
-            elif tool_config.permission.name == "NEVER":
-                interrupt_on[tool_name] = {"before": True}  # Placeholder
-
-        return interrupt_on
+        return build_interrupt_config(self.config)
 
     def _get_system_prompt(self) -> str:
         """Build system prompt from Vibe config."""
@@ -159,7 +152,7 @@ class VibeEngine:
         # Stream events from the agent - handle the correct event format
         async for event in self._agent.astream_events(  # type: ignore
             {"messages": messages},
-            config=config,
+            config=config,  # type: ignore
             version="v2",  # type: ignore
         ):
             # Translate DeepAgents events to Vibe TUI events
@@ -168,11 +161,55 @@ class VibeEngine:
                 yield translated
 
     async def handle_approval(
-        self, approved: bool, feedback: str | None = None
+        self, approved: bool, request_id: str, feedback: str | None = None
     ) -> None:
         """Handle approval decision from TUI."""
         if self.approval_bridge:
-            await self.approval_bridge.respond(approved, feedback)
+            await self.approval_bridge.respond(approved, request_id, feedback)
+
+    async def resume_execution(self, decision: dict[str, Any]) -> None:
+        """Resume execution after approval."""
+        if self._agent is None:
+            return
+
+        config = {"configurable": {"thread_id": self._thread_id}}
+
+        # For LangGraph, resume execution from interrupt by calling invoke with None
+        try:
+            # Resume the agent execution from the interrupt point
+            self._agent.invoke(None, config)  # type: ignore
+        except Exception as e:
+            # Handle resume errors gracefully
+            # In a production system, you might want to log this error
+            pass
+
+    async def reject_execution(self, decision: dict[str, Any]) -> None:
+        """Reject execution and abort operation."""
+        if self._agent is None:
+            return
+
+        config = {"configurable": {"thread_id": self._thread_id}}
+
+        # For rejection, update the state with a rejection message
+        try:
+            from langchain_core.messages import HumanMessage
+
+            # Add a rejection message to the conversation
+            feedback = decision.get("feedback", "Operation rejected by user")
+            rejection_message = HumanMessage(
+                content=f"I reject this operation: {feedback}"
+            )
+
+            # Update the state with the rejection
+            self._agent.update_state(  # type: ignore
+                config,  # type: ignore
+                {"messages": [rejection_message]},
+                as_node="human",  # Update as if from human node
+            )
+        except Exception as e:
+            # Handle reject errors gracefully
+            # In a production system, you might want to log this error
+            pass
 
     def reset(self) -> None:
         """Reset conversation state."""

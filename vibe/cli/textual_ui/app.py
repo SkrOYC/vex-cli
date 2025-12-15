@@ -49,7 +49,13 @@ from vibe.core.autocompletion.path_prompt_adapter import render_path_prompt
 from vibe.core.config import VibeConfig
 from vibe.core.config_path import HISTORY_FILE
 from vibe.core.tools.base import BaseToolConfig, ToolPermission
-from vibe.core.types import ApprovalResponse, LLMMessage, ResumeSessionInfo, Role
+from vibe.core.types import (
+    ApprovalResponse,
+    InterruptEvent,
+    LLMMessage,
+    ResumeSessionInfo,
+    Role,
+)
 from vibe.core.utils import (
     CancellationReason,
     get_user_cancellation_message,
@@ -105,6 +111,7 @@ class VibeApp(App):
 
         self._loading_widget: LoadingWidget | None = None
         self._pending_approval: asyncio.Future | None = None
+        self._current_request_id: str | None = None
 
         self.event_handler: EventHandler | None = None
         self.commands = CommandRegistry()
@@ -169,6 +176,7 @@ class VibeApp(App):
             todo_area_callback=lambda: self.query_one("#todo-area"),
             get_tools_collapsed=lambda: self._tools_collapsed,
             get_todos_collapsed=lambda: self._todos_collapsed,
+            interrupt_callback=self._handle_engine_interrupt,
         )
 
         self._chat_input_container = self.query_one(ChatInputContainer)
@@ -224,7 +232,12 @@ class VibeApp(App):
     async def on_approval_app_approval_granted(
         self, message: ApprovalApp.ApprovalGranted
     ) -> None:
-        if self._pending_approval and not self._pending_approval.done():
+        if isinstance(self.agent, VibeEngine) and self._current_request_id:
+            # DeepAgents flow
+            await self.agent.handle_approval(True, self._current_request_id, None)
+            self._current_request_id = None
+        elif self._pending_approval and not self._pending_approval.done():
+            # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
 
         await self._switch_to_input_app()
@@ -236,7 +249,12 @@ class VibeApp(App):
             message.tool_name, save_permanently=message.save_permanently
         )
 
-        if self._pending_approval and not self._pending_approval.done():
+        if isinstance(self.agent, VibeEngine) and self._current_request_id:
+            # DeepAgents flow
+            await self.agent.handle_approval(True, self._current_request_id, None)
+            self._current_request_id = None
+        elif self._pending_approval and not self._pending_approval.done():
+            # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
 
         await self._switch_to_input_app()
@@ -244,10 +262,16 @@ class VibeApp(App):
     async def on_approval_app_approval_rejected(
         self, message: ApprovalApp.ApprovalRejected
     ) -> None:
-        if self._pending_approval and not self._pending_approval.done():
-            feedback = str(
-                get_user_cancellation_message(CancellationReason.OPERATION_CANCELLED)
-            )
+        feedback = str(
+            get_user_cancellation_message(CancellationReason.OPERATION_CANCELLED)
+        )
+
+        if isinstance(self.agent, VibeEngine) and self._current_request_id:
+            # DeepAgents flow
+            await self.agent.handle_approval(False, self._current_request_id, feedback)
+            self._current_request_id = None
+        elif self._pending_approval and not self._pending_approval.done():
+            # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.NO, feedback))
 
         await self._switch_to_input_app()
@@ -477,6 +501,28 @@ class VibeApp(App):
             self._agent_init_task = asyncio.create_task(self._initialize_agent())
 
         return self._agent_init_task
+
+    async def _handle_engine_interrupt(self, interrupt_data: dict[str, Any]) -> None:
+        """Handle interrupt from VibeEngine requiring approval."""
+        # Extract action request from interrupt data
+        data = interrupt_data.get("data", {})
+        action_request = data.get("action_request")
+        if not action_request:
+            # Fallback
+            action_request = {
+                "name": interrupt_data.get("name", ""),
+                "args": interrupt_data.get("args", {}),
+                "description": interrupt_data.get("description", ""),
+            }
+
+        # Start approval request and get request_id
+        if isinstance(self.agent, VibeEngine) and self.agent.approval_bridge:
+            request_id = self.agent.approval_bridge.start_approval(action_request)
+            # Store request_id for later use
+            self._current_request_id = request_id
+
+        # Show approval dialog
+        await self._switch_to_approval_app_from_action(action_request)
 
     async def _approval_callback(
         self, tool: str, args: dict, tool_call_id: str
@@ -812,7 +858,10 @@ class VibeApp(App):
 
         self.call_after_refresh(config_app.focus)
 
-    async def _switch_to_approval_app(self, tool_name: str, tool_args: dict) -> None:
+    async def _switch_to_approval_app_from_action(
+        self, action_request: dict[str, Any]
+    ) -> None:
+        """Switch to approval app for DeepAgents action request."""
         bottom_container = self.query_one("#bottom-app-container")
 
         try:
@@ -825,8 +874,37 @@ class VibeApp(App):
             self._mode_indicator.display = False
 
         approval_app = ApprovalApp(
-            tool_name=tool_name,
-            tool_args=tool_args,
+            action_request=action_request,
+            workdir=str(self.config.effective_workdir),
+            config=self.config,
+        )
+        await bottom_container.mount(approval_app)
+        self._current_bottom_app = BottomApp.Approval
+
+        self.call_after_refresh(approval_app.focus)
+        self.call_after_refresh(self._scroll_to_bottom)
+
+    async def _switch_to_approval_app(self, tool_name: str, tool_args: dict) -> None:
+        bottom_container = self.query_one("#bottom-app-container")
+
+        try:
+            chat_input_container = self.query_one(ChatInputContainer)
+            await chat_input_container.remove()
+        except Exception:
+            pass
+
+        if self._mode_indicator:
+            self._mode_indicator.display = False
+
+        # For legacy compatibility, create action_request from tool_name/tool_args
+        action_request = {
+            "name": tool_name,
+            "args": tool_args,
+            "description": f"Execute {tool_name} tool",
+        }
+
+        approval_app = ApprovalApp(
+            action_request=action_request,
             workdir=str(self.config.effective_workdir),
             config=self.config,
         )

@@ -286,6 +286,12 @@ class CompactEndEvent(BaseEvent):
     summary_length: int
 
 
+class InterruptEvent(BaseEvent):
+    """Event indicating an agent interrupt requiring approval."""
+
+    interrupt_data: dict[str, Any]
+
+
 class OutputFormat(StrEnum):
     TEXT = auto()
     JSON = auto()

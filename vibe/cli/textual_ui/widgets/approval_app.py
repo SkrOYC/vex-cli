@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from textual import events
 from textual.app import ComposeResult
@@ -29,32 +29,36 @@ class ApprovalApp(Container):
     ]
 
     class ApprovalGranted(Message):
-        def __init__(self, tool_name: str, tool_args: dict) -> None:
+        def __init__(self, action_request: dict[str, Any]) -> None:
             super().__init__()
-            self.tool_name = tool_name
-            self.tool_args = tool_args
+            self.action_request = action_request
+            self.tool_name = action_request.get("name", "")
+            self.tool_args = action_request.get("args", {})
 
     class ApprovalGrantedAlwaysTool(Message):
         def __init__(
-            self, tool_name: str, tool_args: dict, save_permanently: bool
+            self, action_request: dict[str, Any], save_permanently: bool
         ) -> None:
             super().__init__()
-            self.tool_name = tool_name
-            self.tool_args = tool_args
+            self.action_request = action_request
+            self.tool_name = action_request.get("name", "")
+            self.tool_args = action_request.get("args", {})
             self.save_permanently = save_permanently
 
     class ApprovalRejected(Message):
-        def __init__(self, tool_name: str, tool_args: dict) -> None:
+        def __init__(self, action_request: dict[str, Any]) -> None:
             super().__init__()
-            self.tool_name = tool_name
-            self.tool_args = tool_args
+            self.action_request = action_request
+            self.tool_name = action_request.get("name", "")
+            self.tool_args = action_request.get("args", {})
 
     def __init__(
-        self, tool_name: str, tool_args: dict, workdir: str, config: VibeConfig
+        self, action_request: dict[str, Any], workdir: str, config: VibeConfig
     ) -> None:
         super().__init__(id="approval-app")
-        self.tool_name = tool_name
-        self.tool_args = tool_args
+        self.action_request = action_request
+        self.tool_name = action_request.get("name", "")
+        self.tool_args = action_request.get("args", {})
         self.workdir = workdir
         self.config = config
         self.selected_option = 0
@@ -173,23 +177,17 @@ class ApprovalApp(Container):
         match option:
             case 0:
                 self.post_message(
-                    self.ApprovalGranted(
-                        tool_name=self.tool_name, tool_args=self.tool_args
-                    )
+                    self.ApprovalGranted(action_request=self.action_request)
                 )
             case 1:
                 self.post_message(
                     self.ApprovalGrantedAlwaysTool(
-                        tool_name=self.tool_name,
-                        tool_args=self.tool_args,
-                        save_permanently=False,
+                        action_request=self.action_request, save_permanently=False
                     )
                 )
             case 2:
                 self.post_message(
-                    self.ApprovalRejected(
-                        tool_name=self.tool_name, tool_args=self.tool_args
-                    )
+                    self.ApprovalRejected(action_request=self.action_request)
                 )
 
     def on_blur(self, event: events.Blur) -> None:
