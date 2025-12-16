@@ -4,7 +4,11 @@ from typing import TYPE_CHECKING, Any
 
 from langchain.agents.middleware.types import AgentMiddleware, AgentState
 
+from langchain_core.messages import AIMessage
+
 if TYPE_CHECKING:
+    from langgraph.runtime import Runtime
+
     from vibe.core.config import VibeConfig
 
 
@@ -23,44 +27,58 @@ class ContextWarningMiddleware(AgentMiddleware):
         self._warned = False
 
     def before_model(
-        self,
-        state: AgentState,
-        runtime,  # type: ignore
+        self, state: AgentState, runtime: Runtime
     ) -> dict[str, Any] | None:
         """Check context usage before model call and inject warning if needed."""
         if self._warned or self.max_context is None:
             return None
 
-        # Estimate token count from messages
-        messages = state.get("messages", [])
-        estimated_tokens = self._estimate_tokens(messages)
+        # Get actual token count from usage metadata if available
+        current_tokens = self._get_current_token_count(state)
 
-        if estimated_tokens >= self.max_context * self.threshold_percent:
+        if current_tokens >= self.max_context * self.threshold_percent:
             self._warned = True
             # Inject warning message into the conversation
-            warning_message = self._create_warning(estimated_tokens, self.max_context)
+            warning_message = self._create_warning(current_tokens, self.max_context)
             # Return dict to modify state - the runtime will handle displaying this
             return {"warning": warning_message}
 
         return None
 
-    def after_model(
-        self,
-        state: AgentState,
-        runtime,  # type: ignore
-    ) -> dict[str, Any] | None:
+    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """No action needed after model call."""
         return None
+
+    def _get_current_token_count(self, state: AgentState) -> int:
+        """Get current token count from usage metadata or estimate from messages."""
+        # Check if we have usage metadata from previous AI responses
+        messages = state.get("messages", [])
+        for msg in reversed(messages):
+            # Only AIMessage has usage_metadata
+            if isinstance(msg, AIMessage) and msg.usage_metadata:
+                total_tokens = msg.usage_metadata.get("total_tokens", 0)
+                if total_tokens > 0:
+                    return total_tokens
+
+        # Fall back to estimation if no usage metadata available
+        return self._estimate_tokens(messages)
 
     def _estimate_tokens(self, messages: list) -> int:
         """Rough token estimation: ~4 characters per token."""
         total_chars = 0
         for msg in messages:
-            if hasattr(msg, "content"):
-                total_chars += len(str(msg.content))
-            else:
-                # Assume msg is a string
-                total_chars += len(str(msg))
+            content = getattr(msg, "content", msg)
+            if isinstance(content, str):
+                total_chars += len(content)
+            elif isinstance(content, list):
+                # Handle multi-part content (e.g., vision models)
+                for part in content:
+                    if isinstance(part, str):
+                        total_chars += len(part)
+                    elif isinstance(part, dict) and "text" in part:
+                        total_chars += len(str(part.get("text", "")))
+            elif isinstance(content, dict) and "text" in content:
+                total_chars += len(str(content.get("text", "")))
         return total_chars // 4
 
     def _create_warning(self, current_tokens: int, max_tokens: int) -> str:
@@ -94,30 +112,28 @@ class PriceLimitMiddleware(AgentMiddleware):
         """No action needed before model call."""
         return None
 
-    def after_model(
-        self,
-        state: AgentState,
-        runtime,  # type: ignore
-    ) -> dict[str, Any] | None:
+    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """Track cost after each model call and raise error if limit exceeded."""
-        # Extract usage metadata from state (assuming it's added by the agent)
-        usage = state.get("last_usage")
-        if usage:
-            # Get pricing for the model
-            model_name = state.get("model_name", "default")
-            input_rate, output_rate = self.pricing.get(model_name, (0.0, 0.0))
+        # Get the latest AI message from state
+        messages = state.get("messages", [])
+        if messages and isinstance(messages[-1], AIMessage):
+            latest_response = messages[-1]
+            if latest_response.usage_metadata:
+                # Get pricing for the model
+                model_name = state.get("model_name", "default")
+                input_rate, output_rate = self.pricing.get(model_name, (0.0, 0.0))
 
-            # Calculate cost
-            input_tokens = usage.get("input_tokens", 0)
-            output_tokens = usage.get("output_tokens", 0)
-            cost = (input_tokens * input_rate) + (output_tokens * output_rate)
-            self._total_cost += cost
+                # Calculate cost using actual token counts
+                input_tokens = latest_response.usage_metadata.get("input_tokens", 0)
+                output_tokens = latest_response.usage_metadata.get("output_tokens", 0)
+                cost = (input_tokens * input_rate) + (output_tokens * output_rate)
+                self._total_cost += cost
 
-            # Check limit
-            if self._total_cost > self.max_price:
-                raise RuntimeError(
-                    f"Price limit exceeded: ${self._total_cost:.4f} > ${self.max_price:.2f}"
-                )
+                # Check limit
+                if self._total_cost > self.max_price:
+                    raise RuntimeError(
+                        f"Price limit exceeded: ${self._total_cost:.4f} > ${self.max_price:.2f}"
+                    )
 
         return None
 
