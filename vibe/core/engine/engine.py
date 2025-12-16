@@ -15,6 +15,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from vibe.core.config import VibeConfig
 from vibe.core.engine.adapters import ApprovalBridge, EventTranslator
+from vibe.core.engine.middleware import build_middleware_stack
 from vibe.core.engine.models import create_model_from_config
 from vibe.core.engine.tools import VibeToolAdapter
 from vibe.core.interaction_logger import InteractionLogger
@@ -99,6 +100,12 @@ class VibeEngine:
         """Create LangChain model from Vibe config."""
         return create_model_from_config(self.config)
 
+    def _create_backend(self) -> Any:
+        """Create filesystem backend."""
+        return FilesystemBackend(  # type: ignore
+            root_dir=self.config.effective_workdir, virtual_mode=False
+        )
+
     def _build_interrupt_config(self) -> dict[str, Any]:
         """Build HITL interrupt config from Vibe tool permissions."""
         from vibe.core.engine.permissions import build_interrupt_config
@@ -120,14 +127,16 @@ class VibeEngine:
         # Get tools adapted from Vibe format
         tools = VibeToolAdapter.get_all_tools(self.config)
 
+        # Build middleware stack
+        middleware = build_middleware_stack(self.config, model, self._create_backend())
+
         # Build the agent
         self._agent = create_deep_agent(  # type: ignore
             model=model,
             tools=tools,
             system_prompt=self._get_system_prompt(),
-            backend=FilesystemBackend(  # type: ignore
-                root_dir=self.config.effective_workdir, virtual_mode=False
-            ),
+            backend=self._create_backend(),
+            middleware=middleware,
             interrupt_on=self._build_interrupt_config(),
             checkpointer=self._checkpointer,
         )
@@ -141,7 +150,7 @@ class VibeEngine:
 
         config = {
             "configurable": {"thread_id": self._thread_id},
-            "recursion_limit": 1000,
+            "recursion_limit": self.config.max_recursion_depth,
         }
 
         # Prepare messages: convert initial to tuples + new message

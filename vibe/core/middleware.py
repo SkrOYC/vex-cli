@@ -1,3 +1,13 @@
+# DEPRECATED: This module is deprecated as of DeepAgents migration.
+# Middleware functionality has been moved to vibe.core.engine.middleware
+# using LangChain's AgentMiddleware interface.
+# This file will be removed in Phase 3 of the migration.
+
+# DEPRECATED: This module is deprecated as of DeepAgents migration.
+# Middleware functionality has been moved to vibe.core.engine.middleware
+# using LangChain's AgentMiddleware interface.
+# This file will be removed in Phase 3 of the migration.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,6 +21,7 @@ if TYPE_CHECKING:
     from vibe.core.types import AgentStats, LLMMessage
 
 
+# DEPRECATED: Use LangChain AgentMiddleware instead
 class MiddlewareAction(StrEnum):
     CONTINUE = auto()
     STOP = auto()
@@ -18,11 +29,13 @@ class MiddlewareAction(StrEnum):
     INJECT_MESSAGE = auto()
 
 
+# DEPRECATED: Use LangChain AgentMiddleware instead
 class ResetReason(StrEnum):
     STOP = auto()
     COMPACT = auto()
 
 
+# DEPRECATED: Use LangChain AgentState instead
 @dataclass
 class ConversationContext:
     messages: list[LLMMessage]
@@ -30,6 +43,7 @@ class ConversationContext:
     config: VibeConfig
 
 
+# DEPRECATED: Use dict return from AgentMiddleware instead
 @dataclass
 class MiddlewareResult:
     action: MiddlewareAction = MiddlewareAction.CONTINUE
@@ -38,6 +52,7 @@ class MiddlewareResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+# DEPRECATED: Use AgentMiddleware protocol instead
 class ConversationMiddleware(Protocol):
     async def before_turn(self, context: ConversationContext) -> MiddlewareResult: ...
 
@@ -46,6 +61,7 @@ class ConversationMiddleware(Protocol):
     def reset(self, reset_reason: ResetReason = ResetReason.STOP) -> None: ...
 
 
+# DEPRECATED: Turn limits are now handled by LangGraph recursion_limit
 class TurnLimitMiddleware:
     def __init__(self, max_turns: int) -> None:
         self.max_turns = max_turns
@@ -65,6 +81,7 @@ class TurnLimitMiddleware:
         pass
 
 
+# DEPRECATED: Migrated to vibe.core.engine.middleware.PriceLimitMiddleware
 class PriceLimitMiddleware:
     def __init__(self, max_price: float) -> None:
         self.max_price = max_price
@@ -84,6 +101,7 @@ class PriceLimitMiddleware:
         pass
 
 
+# DEPRECATED: Replaced by SummarizationMiddleware from LangChain
 class AutoCompactMiddleware:
     def __init__(self, threshold: int) -> None:
         self.threshold = threshold
@@ -106,6 +124,7 @@ class AutoCompactMiddleware:
         pass
 
 
+# DEPRECATED: Migrated to vibe.core.engine.middleware.ContextWarningMiddleware
 class ContextWarningMiddleware:
     def __init__(
         self, threshold_percent: float = 0.5, max_context: int | None = None
@@ -141,6 +160,7 @@ class ContextWarningMiddleware:
         self.has_warned = False
 
 
+# DEPRECATED: Middleware is now configured in build_middleware_stack
 class MiddlewarePipeline:
     def __init__(self) -> None:
         self.middlewares: list[ConversationMiddleware] = []
