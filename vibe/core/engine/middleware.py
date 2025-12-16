@@ -165,18 +165,11 @@ def build_middleware_stack(
 
     middleware: list[AgentMiddleware] = []
 
-    # DeepAgents provides TodoListMiddleware and FilesystemMiddleware by default
+    # DeepAgents provides TodoListMiddleware, FilesystemMiddleware, and SubAgentMiddleware by default
     # Only add custom middleware that's not already provided by DeepAgents
 
-    # 1. Subagents (optional, Vibe-specific)
-    if config.enable_subagents:
-        middleware.append(
-            SubAgentMiddleware(
-                default_model=model,
-                default_tools=[],  # Will inherit from main agent
-                general_purpose_agent=True,
-            )
-        )
+    # 1. Subagents (optional, Vibe-specific) - handled by DeepAgents automatically
+    # Note: Don't add SubAgentMiddleware manually as it causes duplicate middleware error
 
     # 2. Context warnings (Vibe-specific)
     if config.context_warnings:
@@ -198,13 +191,13 @@ def build_middleware_stack(
 
         middleware.append(PriceLimitMiddleware(config.max_price, pricing))
 
-    # 4. Human-in-the-loop (for approvals)
-    from vibe.core.engine.permissions import build_interrupt_config
+        # 4. Human-in-the-loop (for approvals)
+        from vibe.core.engine.permissions import build_interrupt_config
 
-    interrupt_on = build_interrupt_config(config)
-    if interrupt_on:
-        from langchain.agents.middleware import HumanInTheLoopMiddleware
+        interrupt_on = build_interrupt_config(config)
+        if interrupt_on:
+            from langchain.agents.middleware import HumanInTheLoopMiddleware
 
-        middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
+            middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
 
     return middleware
