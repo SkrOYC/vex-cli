@@ -44,6 +44,7 @@ dependencies = [
     "deepagents>=0.3.0",
     "langchain-mistralai>=0.2.0",
     "langchain-openai>=1.1.0",
+    "langchain-mcp-adapters>=0.2.0",
     "pyperclip>=1.11.0",
     "textual-speedups>=0.2.1",
 ]
