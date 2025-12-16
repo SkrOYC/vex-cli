@@ -7,6 +7,7 @@ from pathlib import Path
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain.agents.middleware import TodoListMiddleware
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from deepagents.middleware.filesystem import FilesystemMiddleware
 from deepagents.backends import StateBackend
@@ -34,6 +35,17 @@ class VibeToolAdapter:
         # Add planning tools from TodoListMiddleware
         todo_middleware = TodoListMiddleware()
         tools.extend(todo_middleware.tools)
+
+        # Add MCP tools using official LangChain MCP adapters
+        if config.mcp_servers:
+            import asyncio
+            try:
+                mcp_tools = asyncio.run(VibeToolAdapter._load_mcp_tools_official(config.mcp_servers))
+                tools.extend(mcp_tools)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to load MCP tools: {e}")
 
         # Add any custom tools from config
         for tool_path in config.tool_paths:
@@ -109,7 +121,11 @@ class VibeToolAdapter:
         import importlib.util
 
         try:
-            spec = importlib.util.spec_from_file_location("custom_tools", file_path)
+            # Create a unique module name to avoid collisions in sys.modules
+            module_name = (
+                f"vibe.custom_tools.{file_path.stem}_{hash(str(file_path.resolve()))}"
+            )
+            spec = importlib.util.spec_from_file_location(module_name, file_path)
             if spec is None or spec.loader is None:
                 return []
             module = importlib.util.module_from_spec(spec)
@@ -140,52 +156,46 @@ class VibeToolAdapter:
             tools.extend(VibeToolAdapter._load_tools_from_file(py_file))
         return tools
 
-        tools = []
+    @staticmethod
+    async def _load_mcp_tools_official(mcp_servers) -> list[BaseTool]:
+        """Load MCP tools using official LangChain MCP adapters."""
+        from langchain_mcp_adapters.client import MultiServerMCPClient
+
+        connections = {}
+        for server in mcp_servers:
+            # Convert Vibe MCP config to langchain-mcp-adapters format
+            connection_config = VibeToolAdapter._convert_vibe_mcp_config(server)
+            connections[server.name] = connection_config
+
+        if not connections:
+            return []
 
         try:
-            if hasattr(mcp_server, "url"):  # HTTP server
-                remote_tools = asyncio.run(list_tools_http(mcp_server))
-                for remote_tool in remote_tools:
-                    tool_class = create_mcp_http_proxy_tool_class(
-                        remote_tool, mcp_server
-                    )
-                    # Adapt to LangChain BaseTool
-                    adapted_tool = VibeToolAdapter._adapt_mcp_tool(tool_class)
-                    tools.append(adapted_tool)
-            elif hasattr(mcp_server, "command"):  # Stdio server
-                remote_tools = asyncio.run(list_tools_stdio(mcp_server))
-                for remote_tool in remote_tools:
-                    tool_class = create_mcp_stdio_proxy_tool_class(
-                        remote_tool, mcp_server
-                    )
-                    # Adapt to LangChain BaseTool
-                    adapted_tool = VibeToolAdapter._adapt_mcp_tool(tool_class)
-                    tools.append(adapted_tool)
+            client = MultiServerMCPClient(connections=connections)
+            return await client.get_tools()
         except Exception as e:
             import logging
-
             logger = logging.getLogger(__name__)
-            logger.error(f"Error loading MCP tools from {mcp_server}: {e}")
-
-        return tools
+            logger.error(f"Error loading MCP tools: {e}")
+            return []
 
     @staticmethod
-    def _adapt_mcp_tool(mcp_tool_class) -> BaseTool:
-        """Adapt an MCP tool class to LangChain BaseTool."""
-        # Instantiate the MCP tool
-        mcp_tool_instance = mcp_tool_class()
+    def _convert_vibe_mcp_config(vibe_server) -> dict:
+        """Convert Vibe MCP server config to langchain-mcp-adapters format."""
+        config = {
+            "transport": vibe_server.transport,
+        }
 
-        # Create a wrapper function
-        async def mcp_wrapper(*args, **kwargs):
-            # Call the MCP tool's run method
-            result = await mcp_tool_instance.arun(*args, **kwargs)
-            # Return the result (assuming it's compatible)
-            return result
+        if vibe_server.transport == "stdio":
+            config["command"] = vibe_server.command
+            if vibe_server.args:
+                config["args"] = vibe_server.args
+        elif vibe_server.transport in ("http", "streamable-http", "streamable_http"):
+            config["url"] = vibe_server.url
+            if hasattr(vibe_server, 'headers') and vibe_server.headers:
+                config["headers"] = vibe_server.headers
+            # Handle API key if configured
+            if hasattr(vibe_server, 'http_headers') and vibe_server.http_headers():
+                config["headers"] = vibe_server.http_headers()
 
-        # Create StructuredTool
-        return StructuredTool.from_function(
-            name=mcp_tool_instance.name,
-            description=mcp_tool_instance.description or "",
-            func=lambda *args, **kwargs: None,  # Sync not supported
-            coroutine=mcp_wrapper,
-        )
+        return config

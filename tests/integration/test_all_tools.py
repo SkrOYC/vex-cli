@@ -223,10 +223,8 @@ error_tool_instance = StructuredTool.from_function(
 
         tool_names = {tool.name for tool in tools}
 
-        # TodoListMiddleware provides write_todos and read_todos
-        # Note: These might not be directly named that way, but should be present
-        # For now, just ensure no exceptions are raised
-        assert len(tools) > 5, "Should have multiple tools including todo tools"
+        # TodoListMiddleware provides write_todos
+        assert "write_todos" in tool_names, "'write_todos' tool not found"
 
     def test_tool_parameter_validation(self, config):
         """Test that tools have proper parameter schemas."""
