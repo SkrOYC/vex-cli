@@ -284,6 +284,7 @@ class VibeConfig(BaseSettings):
     displayed_workdir: str = ""
     auto_compact_threshold: int = 200_000
     context_warnings: bool = False
+    max_price: float | None = None
     textual_theme: str = "textual-dark"
     instructions: str = ""
     workdir: Path | None = Field(default=None, exclude=True)
