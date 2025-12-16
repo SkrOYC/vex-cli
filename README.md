@@ -1,9 +1,7 @@
-# Mistral Vibe
+# vex-cli
 
-[![PyPI Version](https://img.shields.io/pypi/v/mistral-vibe)](https://pypi.org/project/mistral-vibe)
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/release/python-3120/)
-[![CI Status](https://github.com/mistralai/mistral-vibe/actions/workflows/ci.yml/badge.svg)](https://github.com/mistralai/mistral-vibe/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/mistralai/mistral-vibe)](https://github.com/mistralai/mistral-vibe/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/SkrOYC/vex-cli)](https://github.com/SkrOYC/vex-cli/blob/main/LICENSE)
 
 ```
 ██████████████████░░
@@ -17,57 +15,59 @@
 ██████████████████░░
 ```
 
-**Mistral's open-source CLI coding assistant.**
+**A modern CLI coding assistant powered by DeepAgents architecture.**
 
-Mistral Vibe is a command-line coding assistant powered by Mistral's models. It provides a conversational interface to your codebase, allowing you to use natural language to explore, modify, and interact with your projects through a powerful set of tools.
+vex-cli is a command-line coding assistant built on the DeepAgents framework. It provides a conversational interface to your codebase, allowing you to use natural language to explore, modify, and interact with your projects through a powerful set of tools.
 
 > [!WARNING]
-> Mistral Vibe works on Windows, but we officially support and target UNIX environments.
+> vex-cli works on Windows, but we officially support and target UNIX environments.
 
-### One-line install (recommended)
+### Installation (Development)
 
-**Linux and macOS**
-
-```bash
-curl -LsSf https://mistral.ai/vibe/install.sh | bash
-```
-
-**Windows**
-
-First, install uv
-```bash
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Then, use uv command below.
+vex-cli is currently in development. To install from source:
 
 ### Using uv
 
 ```bash
-uv tool install mistral-vibe
+# Clone the repository
+git clone https://github.com/SkrOYC/vex-cli.git
+cd vex-cli
+
+# Install with uv
+uv sync
+uv run vex-cli
 ```
 
 ### Using pip
 
 ```bash
-pip install mistral-vibe
+# Clone the repository
+git clone https://github.com/SkrOYC/vex-cli.git
+cd vex-cli
+
+# Install in development mode
+pip install -e .
 ```
 
 ## Features
 
+- **DeepAgents Architecture**: Modern agent engine powered by [DeepAgents](https://github.com/langchain-ai/deepagents) for reliable, scalable conversations.
+- **Advanced Planning**: Structured task management with TodoListMiddleware for complex multi-step workflows.
+- **Subagent Delegation**: Parallel task execution with isolated contexts for efficient processing.
+- **Context Intelligence**: Automatic summarization middleware for long conversations.
 - **Interactive Chat**: A conversational AI agent that understands your requests and breaks down complex tasks.
-- **Powerful Toolset**: A suite of tools for file manipulation, code searching, version control, and command execution, right from the chat prompt.
-  - Read, write, and patch files (`read_file`, `write_file`, `search_replace`).
+- **Powerful Toolset**: Enhanced filesystem tools with security and better error handling.
+  - Secure file operations (`read_file`, `write_file`, `edit_file`).
   - Execute shell commands in a stateful terminal (`bash`).
   - Recursively search code with `grep` (with `ripgrep` support).
-  - Manage a `todo` list to track the agent's work.
-- **Project-Aware Context**: Vibe automatically scans your project's file structure and Git status to provide relevant context to the agent, improving its understanding of your codebase.
+  - Manage structured `todo` lists to track the agent's work.
+- **Project-Aware Context**: Automatically scans your project's file structure and Git status to provide relevant context to the agent, improving its understanding of your codebase.
 - **Advanced CLI Experience**: Built with modern libraries for a smooth and efficient workflow.
   - Autocompletion for slash commands (`/`) and file paths (`@`).
   - Persistent command history.
   - Beautiful Themes.
 - **Highly Configurable**: Customize models, providers, tool permissions, and UI preferences through a simple `config.toml` file.
-- **Safety First**: Features tool execution approval.
+- **Safety First**: Features tool execution approval with Human-in-the-Loop support.
 
 ## Quick Start
 
@@ -77,13 +77,13 @@ pip install mistral-vibe
    cd /path/to/your/project
    ```
 
-2. Run Vibe:
+2. Run vex-cli:
 
-   ```bash
-   vibe
-   ```
+    ```bash
+    vex-cli
+    ```
 
-3. If this is your first time running Vibe, it will:
+3. If this is your first time running vex-cli, it will:
 
    - Create a default configuration file at `~/.vibe/config.toml`
    - Prompt you to enter your API key if it's not already configured
@@ -107,26 +107,26 @@ pip install mistral-vibe
 
 ### Interactive Mode
 
-Simply run `vibe` to enter the interactive chat loop.
+Simply run `vex-cli` to enter the interactive chat loop.
 
 - **Multi-line Input**: Press `Ctrl+J` or `Shift+Enter` for select terminals to insert a newline.
 - **File Paths**: Reference files in your prompt using the `@` symbol for smart autocompletion (e.g., `> Read the file @src/agent.py`).
 - **Shell Commands**: Prefix any command with `!` to execute it directly in your shell, bypassing the agent (e.g., `> !ls -l`).
 
-You can start Vibe with a prompt with the following command:
+You can start vex-cli with a prompt with the following command:
 
 ```bash
-vibe "Refactor the main function in cli/main.py to be more modular."
+vex-cli "Refactor the main function in cli/main.py to be more modular."
 ```
 
 **Note**: The `--auto-approve` flag automatically approves all tool executions without prompting. In interactive mode, you can also toggle auto-approve on/off using `Shift+Tab`.
 
 ### Programmatic Mode
 
-You can run Vibe non-interactively by piping input or using the `--prompt` flag. This is useful for scripting.
+You can run vex-cli non-interactively by piping input or using the `--prompt` flag. This is useful for scripting.
 
 ```bash
-vibe --prompt "Refactor the main function in cli/main.py to be more modular."
+vex-cli --prompt "Refactor the main function in cli/main.py to be more modular."
 ```
 
 by default it will use `auto-approve` mode.
@@ -137,29 +137,29 @@ Use slash commands for meta-actions and configuration changes during a session.
 
 ## Configuration
 
-Vibe is configured via a `config.toml` file. It looks for this file first in `./.vibe/config.toml` and then falls back to `~/.vibe/config.toml`.
+vex-cli is configured via a `config.toml` file. It looks for this file first in `./.vibe/config.toml` and then falls back to `~/.vibe/config.toml`.
 
 ### API Key Configuration
 
-Vibe supports multiple ways to configure your API keys:
+vex-cli supports multiple ways to configure your API keys:
 
-1. **Interactive Setup (Recommended for first-time users)**: When you run Vibe for the first time or if your API key is missing, Vibe will prompt you to enter it. The key will be securely saved to `~/.vibe/.env` for future sessions.
+1. **Interactive Setup (Recommended for first-time users)**: When you run vex-cli for the first time or if your API key is missing, vex-cli will prompt you to enter it. The key will be securely saved to `~/.vibe/.env` for future sessions.
 
 2. **Environment Variables**: Set your API key as an environment variable:
 
-   ```bash
-   export MISTRAL_API_KEY="your_mistral_api_key"
-   ```
+    ```bash
+    export MISTRAL_API_KEY="your_mistral_api_key"
+    ```
 
 3. **`.env` File**: Create a `.env` file in `~/.vibe/` and add your API keys:
 
-   ```bash
-   MISTRAL_API_KEY=your_mistral_api_key
-   ```
+    ```bash
+    MISTRAL_API_KEY=your_mistral_api_key
+    ```
 
-   Vibe automatically loads API keys from `~/.vibe/.env` on startup. Environment variables take precedence over the `.env` file if both are set.
+    vex-cli automatically loads API keys from `~/.vibe/.env` on startup. Environment variables take precedence over the `.env` file if both are set.
 
-**Note**: The `.env` file is specifically for API keys and other provider credentials. General Vibe configuration should be done in `config.toml`.
+**Note**: The `.env` file is specifically for API keys and other provider credentials. General vex-cli configuration should be done in `config.toml`.
 
 ### Custom System Prompts
 
@@ -170,6 +170,9 @@ To use a custom system prompt, set the `system_prompt_id` in your configuration 
 ```toml
 # Use a custom system prompt
 system_prompt_id = "my_custom_prompt"
+
+# Enable DeepAgents features (default: false)
+use_deepagents = true
 ```
 
 This will load the prompt from `~/.vibe/prompts/my_custom_prompt.md`.
@@ -178,13 +181,13 @@ This will load the prompt from `~/.vibe/prompts/my_custom_prompt.md`.
 
 You can create custom agent configurations for specific use cases (e.g., red-teaming, specialized tasks) by adding agent-specific TOML files in the `~/.vibe/agents/` directory.
 
-To use a custom agent, run Vibe with the `--agent` flag:
+To use a custom agent, run vex-cli with the `--agent` flag:
 
 ```bash
-vibe --agent my_custom_agent
+vex-cli --agent my_custom_agent
 ```
 
-Vibe will look for a file named `my_custom_agent.toml` in the agents directory and apply its configuration.
+vex-cli will look for a file named `my_custom_agent.toml` in the agents directory and apply its configuration.
 
 Example custom agent configuration (`~/.vibe/agents/redteam.toml`):
 
@@ -208,7 +211,7 @@ Note: this implies that you have setup a redteam prompt names `~/.vibe/prompts/r
 
 ### MCP Server Configuration
 
-You can configure MCP (Model Context Protocol) servers to extend Vibe's capabilities. Add MCP server configurations under the `mcp_servers` section:
+You can configure MCP (Model Context Protocol) servers to extend vex-cli's capabilities. Add MCP server configurations under the `mcp_servers` section:
 
 ```toml
 # Example MCP server configurations
@@ -287,22 +290,22 @@ Notes:
 - MCP tool names use underscores, e.g., `serena_list` not `serena.list`.
 - Regex patterns are matched against the full tool name using fullmatch.
 
-### Custom Vibe Home Directory
+### Custom vex-cli Home Directory
 
-By default, Vibe stores its configuration in `~/.vibe/`. You can override this by setting the `VIBE_HOME` environment variable:
+By default, vex-cli stores its configuration in `~/.vibe/`. You can override this by setting the `VIBE_HOME` environment variable:
 
 ```bash
 export VIBE_HOME="/path/to/custom/vibe/home"
 ```
 
-This affects where Vibe looks for:
+This affects where vex-cli looks for:
 
 - `config.toml` - Main configuration
 - `.env` - API keys
 - `agents/` - Custom agent configurations
 - `prompts/` - Custom system prompts
 - `tools/` - Custom tools
-- `logs/` - Session logsRetryTo run code, enable code execution and file creation in Settings > Capabilities.
+- `logs/` - Session logs
 
 ## Resources
 
@@ -311,7 +314,7 @@ This affects where Vibe looks for:
 
 ## License
 
-Copyright 2025 Mistral AI
+Copyright 2025 SkrOYC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
