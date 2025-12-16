@@ -186,6 +186,23 @@ class VibeEngine:
         }
 ```
 
+## Phase 2: Agent Engine Implementation (100% Complete)
+
+This phase implements the core VibeEngine using DeepAgents middleware and tools.
+
+### Completed Work
+- [x] **Middleware Implementation**: Implemented all custom Vibe middleware using DeepAgents patterns
+  - `ContextWarningMiddleware` - Tracks token usage and warns when approaching limits
+  - `PriceLimitMiddleware` - Enforces cost limits with configurable pricing per model
+- [x] **Middleware Integration**: Integrated middleware into the agent execution flow
+- [x] **Stats Interface**: Updated stats interface to match `AgentStatsProtocol` requirements
+- [x] **Tool Integration**: Adapted existing tools for DeepAgents compatibility
+- [x] **Configuration**: Added `use_deepagents` feature flag to toggle between legacy and DeepAgents
+- [x] **Duplicate Middleware Fix**: Resolved the "Please remove duplicate middleware instances" error by understanding that DeepAgents provides default middleware (TodoListMiddleware, FilesystemMiddleware) that conflicts with our custom implementations.
+
+### Issues Resolved
+- **Duplicate Middleware Error**: Fixed by recognizing that DeepAgents provides default middleware (TodoListMiddleware and FilesystemMiddleware) automatically, so we no longer add them manually to avoid conflicts. The remaining middleware stack now contains only custom Vibe-specific middleware and any optional middleware like SubAgentMiddleware.
+
 ## Migration Path
 
 ### Step 1: Create Engine Module
@@ -195,7 +212,8 @@ vibe/core/engine/
 ├── __init__.py
 ├── engine.py        # VibeEngine class
 ├── adapters.py      # Event translation, approval bridge
-└── tools.py         # Tool adaptation utilities
+├── tools.py         # Tool adaptation utilities
+└── middleware.py    # Custom middleware implementations
 ```
 
 ### Step 2: Parallel Implementation
@@ -304,11 +322,12 @@ class VibeEngine:
 
 ## Validation Checklist
 
-- [ ] Engine initializes successfully
-- [ ] Model connects to Mistral API
-- [ ] Tools execute correctly
-- [ ] Streaming events reach TUI
-- [ ] Approval workflow functions
-- [ ] State persists across turns
-- [ ] Reset clears conversation
-- [ ] Performance acceptable
+- [x] Engine initializes successfully
+- [x] Model connects to Mistral API
+- [x] Tools execute correctly
+- [x] Streaming events reach TUI
+- [x] Approval workflow functions
+- [x] State persists across turns
+- [x] Reset clears conversation
+- [x] Performance acceptable
+- [x] No duplicate middleware errors

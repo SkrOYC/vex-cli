@@ -23,27 +23,24 @@ class VibeToolAdapter:
         """Get all tools configured for the agent."""
         tools: list[BaseTool] = []
 
-        # Add custom bash tool (DeepAgents execute requires SandboxBackend)
+        # Add custom bash tool
         tools.append(VibeToolAdapter._create_bash_tool(config))
 
-        # Add filesystem tools from FilesystemMiddleware
-        filesystem_middleware = FilesystemMiddleware(
-            backend=lambda rt: StateBackend(rt)
-        )
-        tools.extend(filesystem_middleware.tools)
-
-        # Add planning tools from TodoListMiddleware
-        todo_middleware = TodoListMiddleware()
-        tools.extend(todo_middleware.tools)
+        # DeepAgents provides filesystem and planning (TodoList) tools by default,
+        # so we don't need to create these middleware instances here
 
         # Add MCP tools using official LangChain MCP adapters
         if config.mcp_servers:
             import asyncio
+
             try:
-                mcp_tools = asyncio.run(VibeToolAdapter._load_mcp_tools_official(config.mcp_servers))
+                mcp_tools = asyncio.run(
+                    VibeToolAdapter._load_mcp_tools_official(config.mcp_servers)
+                )
                 tools.extend(mcp_tools)
             except Exception as e:
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.error(f"Failed to load MCP tools: {e}")
 
@@ -175,6 +172,7 @@ class VibeToolAdapter:
             return await client.get_tools()
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error loading MCP tools: {e}")
             return []
@@ -182,9 +180,7 @@ class VibeToolAdapter:
     @staticmethod
     def _convert_vibe_mcp_config(vibe_server) -> dict:
         """Convert Vibe MCP server config to langchain-mcp-adapters format."""
-        config = {
-            "transport": vibe_server.transport,
-        }
+        config = {"transport": vibe_server.transport}
 
         if vibe_server.transport == "stdio":
             config["command"] = vibe_server.command
@@ -192,10 +188,10 @@ class VibeToolAdapter:
                 config["args"] = vibe_server.args
         elif vibe_server.transport in ("http", "streamable-http", "streamable_http"):
             config["url"] = vibe_server.url
-            if hasattr(vibe_server, 'headers') and vibe_server.headers:
+            if hasattr(vibe_server, "headers") and vibe_server.headers:
                 config["headers"] = vibe_server.headers
             # Handle API key if configured
-            if hasattr(vibe_server, 'http_headers') and vibe_server.http_headers():
+            if hasattr(vibe_server, "http_headers") and vibe_server.http_headers():
                 config["headers"] = vibe_server.http_headers()
 
         return config

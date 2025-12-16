@@ -259,7 +259,7 @@ class AssistantEvent(BaseEvent):
 
 class ToolCallEvent(BaseEvent):
     tool_name: str
-    tool_class: type[BaseTool]
+    tool_class: type[BaseTool] | None
     args: BaseModel
     tool_call_id: str
 

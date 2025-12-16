@@ -110,7 +110,7 @@ def matches_pattern(tool_name: str, args: dict[str, Any], pattern: str) -> bool:
     return False
 
 
-def build_interrupt_config(config: VibeConfig) -> dict[str, bool]:
+def build_interrupt_config(config: VibeConfig) -> dict[str, Any]:
     """Build interrupt config from Vibe tool permissions with pattern support."""
     interrupt_on = {}
 

@@ -19,6 +19,10 @@ class ContextWarningMiddleware(AgentMiddleware):
     into the conversation when token usage exceeds the configured threshold.
     """
 
+    @property
+    def name(self) -> str:
+        return "context_warning"
+
     def __init__(
         self, threshold_percent: float = 0.5, max_context: int | None = None
     ) -> None:
@@ -97,6 +101,10 @@ class PriceLimitMiddleware(AgentMiddleware):
     cost across model calls and raising an interrupt when the limit is reached.
     """
 
+    @property
+    def name(self) -> str:
+        return "price_limit"
+
     def __init__(
         self, max_price: float, pricing: dict[str, tuple[float, float]] | None = None
     ):
@@ -146,29 +154,21 @@ def build_middleware_stack(
     """Build the complete middleware stack for the agent.
 
     Order is important for correct execution:
-    1. Planning (TodoListMiddleware)
-    2. Filesystem (FilesystemMiddleware)
-    3. Subagents (SubAgentMiddleware, optional)
-    4. Summarization (SummarizationMiddleware)
-    5. Context warnings (ContextWarningMiddleware, Vibe-specific)
-    6. Price limit (PriceLimitMiddleware, Vibe-specific)
-    7. Human-in-the-loop (HumanInTheLoopMiddleware, for approvals)
+    1. Subagents (SubAgentMiddleware, optional) - DeepAgents provides TodoList and Filesystem by default
+    2. Context warnings (ContextWarningMiddleware, Vibe-specific)
+    3. Price limit (PriceLimitMiddleware, Vibe-specific)
+    4. Human-in-the-loop (HumanInTheLoopMiddleware, for approvals)
     """
-    from langchain.agents.middleware import HumanInTheLoopMiddleware, TodoListMiddleware
-    from langchain.agents.middleware.summarization import SummarizationMiddleware
+    from langchain.agents.middleware import HumanInTheLoopMiddleware
 
-    from deepagents.middleware.filesystem import FilesystemMiddleware
     from deepagents.middleware.subagents import SubAgentMiddleware
 
     middleware: list[AgentMiddleware] = []
 
-    # 1. Planning
-    middleware.append(TodoListMiddleware())
+    # DeepAgents provides TodoListMiddleware and FilesystemMiddleware by default
+    # Only add custom middleware that's not already provided by DeepAgents
 
-    # 2. Filesystem
-    middleware.append(FilesystemMiddleware(backend=backend))
-
-    # 3. Subagents (optional)
+    # 1. Subagents (optional, Vibe-specific)
     if config.enable_subagents:
         middleware.append(
             SubAgentMiddleware(
@@ -178,17 +178,7 @@ def build_middleware_stack(
             )
         )
 
-    # 4. Summarization (replaces AutoCompactMiddleware)
-    if model is not None:
-        middleware.append(
-            SummarizationMiddleware(
-                model=model,
-                trigger=("tokens", config.auto_compact_threshold),
-                keep=("messages", 6),  # Keep last 6 messages
-            )
-        )
-
-    # 5. Context warnings (Vibe-specific)
+    # 2. Context warnings (Vibe-specific)
     if config.context_warnings:
         middleware.append(
             ContextWarningMiddleware(
@@ -196,7 +186,7 @@ def build_middleware_stack(
             )
         )
 
-    # 6. Price limit (Vibe-specific)
+    # 3. Price limit (Vibe-specific)
     if config.max_price is not None:
         # Get pricing from model config
         pricing = {}
@@ -208,10 +198,13 @@ def build_middleware_stack(
 
         middleware.append(PriceLimitMiddleware(config.max_price, pricing))
 
-    # 7. Human-in-the-loop (for approvals)
-    # This would be added based on interrupt config, but for now placeholder
-    # interrupt_on = build_interrupt_config(config)
-    # if interrupt_on:
-    #     middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
+    # 4. Human-in-the-loop (for approvals)
+    from vibe.core.engine.permissions import build_interrupt_config
+
+    interrupt_on = build_interrupt_config(config)
+    if interrupt_on:
+        from langchain.agents.middleware import HumanInTheLoopMiddleware
+
+        middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
 
     return middleware

@@ -89,7 +89,7 @@ class EventTranslator:
 
                 return ToolCallEvent(
                     tool_name=tool_name,
-                    tool_class=tool_class,  # type: ignore
+                    tool_class=tool_class,
                     args=args,
                     tool_call_id=event_data.get("run_id", ""),
                 )

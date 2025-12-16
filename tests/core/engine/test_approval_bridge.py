@@ -22,5 +22,5 @@ class TestApprovalBridge:
     async def test_respond_without_pending(self):
         """Test responding when no pending approval."""
         bridge = ApprovalBridge()
-        # Should not raise
-        await bridge.respond(True)
+        # Should not raise - use a fake request_id since there's no pending request
+        await bridge.respond(True, "fake_request_id")

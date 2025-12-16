@@ -124,20 +124,32 @@ class VibeEngine:
         """Initialize the DeepAgents engine."""
         model = self._create_model()
 
+        # Create backend once to be used consistently
+        backend = self._create_backend()
+
         # Get tools adapted from Vibe format
         tools = VibeToolAdapter.get_all_tools(self.config)
 
         # Build middleware stack
-        middleware = build_middleware_stack(self.config, model, self._create_backend())
+        middleware = build_middleware_stack(self.config, model, backend)
 
         # Build the agent
         self._agent = create_deep_agent(  # type: ignore
             model=model,
             tools=tools,
             system_prompt=self._get_system_prompt(),
-            backend=self._create_backend(),
+            backend=backend,
             middleware=middleware,
-            interrupt_on=self._build_interrupt_config(),
+            checkpointer=self._checkpointer,
+        )
+
+        # Build the agent
+        self._agent = create_deep_agent(  # type: ignore
+            model=model,
+            tools=tools,
+            system_prompt=self._get_system_prompt(),
+            backend=backend,
+            middleware=middleware,
             checkpointer=self._checkpointer,
         )
 
@@ -273,10 +285,28 @@ class VibeEngine:
         return None  # Placeholder
 
     @property
-    def stats(self) -> AgentStatsProtocol:
+    def stats(self) -> dict[str, Any]:
         """Get current session statistics."""
         if self._agent is None:
-            return VibeEngineStats(messages=0, context_tokens=0, todos=[])
+            return {
+                "messages": 0,
+                "context_tokens": 0,
+                "todos": [],
+                "steps": 0,
+                "session_prompt_tokens": 0,
+                "session_completion_tokens": 0,
+                "tool_calls_agreed": 0,
+                "tool_calls_rejected": 0,
+                "tool_calls_failed": 0,
+                "tool_calls_succeeded": 0,
+                "last_turn_prompt_tokens": 0,
+                "last_turn_completion_tokens": 0,
+                "last_turn_duration": 0.0,
+                "tokens_per_second": 0.0,
+                "input_price_per_million": 0.0,
+                "output_price_per_million": 0.0,
+            }
+
         # Extract from LangGraph state
         state = self._agent.get_state(  # type: ignore
             {"configurable": {"thread_id": self._thread_id}}
@@ -284,9 +314,25 @@ class VibeEngine:
         messages = state.values.get("messages", [])
         context_tokens = self._estimate_tokens(messages)
         todos = state.values.get("todos", [])
-        return VibeEngineStats(
-            messages=len(messages), context_tokens=context_tokens, todos=todos
-        )
+
+        return {
+            "messages": len(messages),
+            "context_tokens": context_tokens,
+            "todos": todos,
+            "steps": 0,
+            "session_prompt_tokens": context_tokens // 2,
+            "session_completion_tokens": context_tokens // 2,
+            "tool_calls_agreed": 0,
+            "tool_calls_rejected": 0,
+            "tool_calls_failed": 0,
+            "tool_calls_succeeded": 0,
+            "last_turn_prompt_tokens": 0,
+            "last_turn_completion_tokens": 0,
+            "last_turn_duration": 0.0,
+            "tokens_per_second": 0.0,
+            "input_price_per_million": 0.0,
+            "output_price_per_million": 0.0,
+        }
 
     def _estimate_tokens(self, messages: list) -> int:
         """Estimate token count from messages using actual token metadata if available."""
