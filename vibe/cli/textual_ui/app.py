@@ -536,8 +536,9 @@ class VibeApp(App):
         """Get the appropriate event iterator for the current engine."""
         if isinstance(self.agent, VibeEngine):
             return self.agent.run(prompt)
-        else:
+        elif isinstance(self.agent, Agent):
             return self.agent.act(prompt)
+        raise TypeError(f"Unsupported agent type: {type(self.agent)}")
 
     async def _handle_agent_turn(self, prompt: str) -> None:
         if not self.agent:
