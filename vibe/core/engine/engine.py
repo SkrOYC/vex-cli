@@ -285,10 +285,24 @@ class VibeEngine:
         """Clear conversation history."""
         self.reset()  # Reset achieves the same effect
 
+    def get_current_messages(self) -> list:
+        """Get the current conversation messages from the agent state."""
+        if self._agent is not None:
+            state = self._agent.get_state(  # type: ignore
+                {"configurable": {"thread_id": self._thread_id}}
+            )
+            return state.values.get("messages", [])
+        return []
+
     def get_log_path(self) -> str | None:
         """Get the path to the current session's log file."""
         # TODO: Implement proper log path retrieval when interaction logger is added
         return None  # Placeholder
+
+    @property
+    def session_id(self) -> str:
+        """Get the session ID/thread ID for this engine."""
+        return self._thread_id
 
     @property
     def stats(self) -> "VibeEngineStats":

@@ -4,6 +4,7 @@ import pytest
 from vibe.core.config import VibeConfig
 from vibe.core.engine import VibeEngine
 from vibe.core.engine.adapters import ApprovalBridge
+from vibe.core.engine.engine import VibeEngineStats
 
 
 class TestVibeEngine:
@@ -47,8 +48,6 @@ class TestVibeEngine:
         """Test stats property returns expected structure."""
         engine = VibeEngine(deepagents_config)
         stats = engine.stats
-
-        from vibe.core.engine.engine import VibeEngineStats
 
         assert isinstance(stats, VibeEngineStats)
         assert hasattr(stats, "context_tokens")

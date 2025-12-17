@@ -47,7 +47,11 @@ def estimate_tokens_for_messages(
     if hasattr(model, "get_num_tokens_from_messages"):
         try:
             return model.get_num_tokens_from_messages(messages)
-        except Exception:
+        except Exception as e:
+            # Log the exception for debugging while falling back to estimation
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Failed to count tokens using get_num_tokens_from_messages: {e}")
             pass  # Fall back to estimation if the method fails
 
     # If the model has a get_num_tokens method, use it for individual messages
@@ -72,7 +76,11 @@ def estimate_tokens_for_messages(
                 else:
                     total_tokens += model.get_num_tokens(str(content))
             return total_tokens
-        except Exception:
+        except Exception as e:
+            # Log the exception for debugging while falling back to estimation
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Failed to count tokens using get_num_tokens: {e}")
             pass  # Fall back to estimation if the method fails
 
     # Fallback: rough estimation (4 characters per token)

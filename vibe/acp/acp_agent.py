@@ -44,6 +44,7 @@ from acp.schema import (
     TextResourceContents,
     ToolCall,
 )
+import uuid
 from pydantic import BaseModel, ConfigDict
 
 from vibe import VIBE_ROOT
@@ -167,7 +168,7 @@ class VibeAcpAgent(AcpAgent):
 
         # Create VibeEngine instance with the config
         agent = VibeEngine(config=config, approval_callback=None)
-        session = AcpSession(id=agent._thread_id, agent=agent)
+        session = AcpSession(id=agent.session_id, agent=agent)
         self.sessions[session.id] = session
 
         # Set up the approval bridge with session-specific callback
@@ -224,8 +225,6 @@ class VibeAcpAgent(AcpAgent):
                 return {"approved": True}  # Auto-approve if no action request
 
             # Generate a unique tool call ID for ACP
-            import uuid
-
             tool_call_id = str(uuid.uuid4())
 
             # Create the tool call update for ACP
@@ -306,11 +305,34 @@ class VibeAcpAgent(AcpAgent):
         )
 
         # VibeEngine doesn't have reload_with_initial_messages method
-        # We need to recreate the engine with the new config
+        # We need to recreate the engine with the new config but preserve conversation history
         from vibe.core.engine.adapters import ApprovalBridge
 
+        # Extract current conversation history before recreating the engine
+        current_messages = session.agent.get_current_messages()
+        
+        # Convert LangChain messages back to LLMMessage format for initial_messages
+        # For now, we'll use the initial messages functionality if available
+        # or recreate the VibeEngine with the preserved state
         approval_bridge = session.agent.approval_bridge
         new_agent = VibeEngine(config=new_config, approval_callback=approval_bridge)
+        
+        # Initialize the new agent to create the underlying DeepAgents instance
+        new_agent.initialize()
+        
+        # Copy over the preserved conversation state to the new agent
+        # We need to transfer the state from the old agent to the new one
+        if current_messages and new_agent._agent:
+            # Update the new agent's state with the preserved messages
+            # We need to transfer the state from the old agent to the new one
+            if current_messages and new_agent._agent:
+                # Update the new agent's state with the preserved messages
+                new_agent._agent.update_state(  # type: ignore
+                    {"configurable": {"thread_id": new_agent.session_id}},
+                    {"messages": current_messages},
+                    as_node="human",  # Use a generic node for state transfer
+                )
+        
         session.agent = new_agent
 
         return SetSessionModelResponse()
