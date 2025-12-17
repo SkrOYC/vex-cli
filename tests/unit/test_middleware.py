@@ -168,31 +168,33 @@ class TestBuildMiddlewareStack:
 
         middleware = build_middleware_stack(config, model, backend)
 
-        # Should have TodoListMiddleware, FilesystemMiddleware, SubAgentMiddleware
-        # SummarizationMiddleware is skipped when model is None, ContextWarningMiddleware when context_warnings=False
-        assert len(middleware) == 3
-        assert any("TodoListMiddleware" in str(type(m)) for m in middleware)
-        assert any("FilesystemMiddleware" in str(type(m)) for m in middleware)
-        assert any("SubAgentMiddleware" in str(type(m)) for m in middleware)
+        # With default config (no special settings like context_warnings or max_price),
+        # the middleware stack should be empty
+        # DeepAgents provides TodoListMiddleware, FilesystemMiddleware, and SubAgentMiddleware automatically
+        # when creating the agent, not through this function
+        assert isinstance(middleware, list)
+        assert len(middleware) == 0
 
     def test_includes_subagents_when_enabled(self):
-        """Test that SubAgentMiddleware is included when enabled."""
+        """Test that SubAgentMiddleware is not manually included (it's handled by DeepAgents)."""
         config = VibeConfig(enable_subagents=True)
         model = None
         backend = None
 
         middleware = build_middleware_stack(config, model, backend)
 
-        assert any("SubAgentMiddleware" in str(type(m)) for m in middleware)
+        # SubAgentMiddleware is provided automatically by DeepAgents, not manually added
+        assert not any("SubAgentMiddleware" in str(type(m)) for m in middleware)
 
     def test_excludes_subagents_when_disabled(self):
-        """Test that SubAgentMiddleware is excluded when disabled."""
+        """Test that SubAgentMiddleware is not manually included (it's handled by DeepAgents)."""
         config = VibeConfig(enable_subagents=False)
         model = None
         backend = None
 
         middleware = build_middleware_stack(config, model, backend)
 
+        # SubAgentMiddleware is provided automatically by DeepAgents, not manually added
         assert not any("SubAgentMiddleware" in str(type(m)) for m in middleware)
 
     def test_includes_price_limit_when_configured(self):

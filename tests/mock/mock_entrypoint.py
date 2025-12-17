@@ -40,21 +40,18 @@ def mock_llm_output() -> None:
     async def mock_complete_streaming(*args, **kwargs) -> AsyncGenerator[LLMChunk]:
         yield next(chunk_iterable)
 
+    # Since backend migration is complete and legacy backends are removed,
+    # we need to patch the new LangChain model methods used by DeepAgents
+    # Mock the async invoke and astream methods for LangChain models
     patch(
-        "vibe.core.llm.backend.mistral.MistralBackend.complete",
-        side_effect=mock_complete,
+        "langchain_mistralai.ChatMistralAI.ainvoke", side_effect=mock_complete
+    ).start()
+    patch("langchain_openai.ChatOpenAI.ainvoke", side_effect=mock_complete).start()
+    patch(
+        "langchain_mistralai.ChatMistralAI.astream", side_effect=mock_complete_streaming
     ).start()
     patch(
-        "vibe.core.llm.backend.generic.GenericBackend.complete",
-        side_effect=mock_complete,
-    ).start()
-    patch(
-        "vibe.core.llm.backend.mistral.MistralBackend.complete_streaming",
-        side_effect=mock_complete_streaming,
-    ).start()
-    patch(
-        "vibe.core.llm.backend.generic.GenericBackend.complete_streaming",
-        side_effect=mock_complete_streaming,
+        "langchain_openai.ChatOpenAI.astream", side_effect=mock_complete_streaming
     ).start()
 
 
