@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 import os
 from pathlib import Path
 from typing import Any
@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
@@ -74,11 +75,12 @@ class VibeEngine:
     def __init__(
         self,
         config: VibeConfig,
-        approval_callback: ApprovalBridge | None = None,
+        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
         initial_messages: list[LLMMessage] | None = None,
     ) -> None:
         self.config = config
-        self.approval_bridge = approval_callback
+        self.approval_callback = approval_callback
+        self.approval_bridge: ApprovalBridge | None = None
         self.event_translator = EventTranslator(config)
         self.initial_messages = initial_messages if initial_messages is not None else []
         self._agent: CompiledStateGraph | None = None
@@ -98,6 +100,13 @@ class VibeEngine:
 
         # Check if DeepAgents should be used based on the feature flag
         self._use_deepagents = config.use_deepagents
+
+    def _create_approval_bridge(self) -> ApprovalBridge:
+        """Create ApprovalBridge with proper configuration and callback."""
+        return ApprovalBridge(
+            config=self.config,
+            approval_callback=self.approval_callback
+        )
 
     def _create_model(self) -> Any:
         """Create LangChain model from Vibe config."""
@@ -133,6 +142,10 @@ class VibeEngine:
         # Get tools adapted from Vibe format
         tools = VibeToolAdapter.get_all_tools(self.config)
 
+        # Create approval bridge if callback provided
+        if self.approval_callback:
+            self.approval_bridge = self._create_approval_bridge()
+
         # Build middleware stack
         middleware = build_middleware_stack(self.config, model, backend)
 
@@ -153,7 +166,7 @@ class VibeEngine:
 
         assert self._agent is not None  # Should be initialized above
 
-        config = {
+        config = {  # type: ignore
             "configurable": {"thread_id": self._thread_id},
             "recursion_limit": self.config.max_recursion_depth,
         }

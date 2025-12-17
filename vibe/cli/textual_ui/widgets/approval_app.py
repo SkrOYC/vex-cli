@@ -67,6 +67,10 @@ class ApprovalApp(Container):
         self.tool_info_container: Vertical | None = None
         self.option_widgets: list[Static] = []
         self.help_widget: Static | None = None
+        
+        # Get reference to app's pending approval future
+        self.app = self.app
+        self.pending_approval_future = getattr(self.app, '_pending_approval', None)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="approval-content"):
@@ -176,19 +180,42 @@ class ApprovalApp(Container):
     def _handle_selection(self, option: int) -> None:
         match option:
             case 0:
+                # Approve once
+                self._set_approval_result({
+                    "approved": True,
+                    "always_approve": False,
+                    "feedback": None
+                })
                 self.post_message(
                     self.ApprovalGranted(action_request=self.action_request)
                 )
             case 1:
+                # Approve always for session
+                self._set_approval_result({
+                    "approved": True,
+                    "always_approve": True,
+                    "feedback": f"Auto-approve {self.tool_name} for this session"
+                })
                 self.post_message(
                     self.ApprovalGrantedAlwaysTool(
                         action_request=self.action_request, save_permanently=False
                     )
                 )
             case 2:
+                # Reject
+                self._set_approval_result({
+                    "approved": False,
+                    "always_approve": False,
+                    "feedback": "User rejected the operation"
+                })
                 self.post_message(
                     self.ApprovalRejected(action_request=self.action_request)
                 )
+
+    def _set_approval_result(self, result: dict[str, Any]) -> None:
+        """Set the approval result on the app's pending approval future."""
+        if self.pending_approval_future and not self.pending_approval_future.done():
+            self.pending_approval_future.set_result(result)
 
     def on_blur(self, event: events.Blur) -> None:
         self.call_after_refresh(self.focus)
