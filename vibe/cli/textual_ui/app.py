@@ -150,7 +150,7 @@ class VibeApp(App):
 
         with Horizontal(id="loading-area"):
             yield Static(id="loading-area-content")
-            yield ModeIndicator(auto_approve=self.auto_approve)
+            yield ModeIndicator(auto_approve=self.auto_approve, use_deepagents=self.config.use_deepagents)
 
         yield Static(id="todo-area")
 
@@ -532,6 +532,14 @@ class VibeApp(App):
         self._pending_approval = None
         return result
 
+    def _get_engine_iterator(self, prompt: str) -> AsyncIterator[BaseEvent]:
+        """Get the appropriate event iterator for the current engine."""
+        if isinstance(self.agent, VibeEngine):
+            return self.agent.run(prompt)
+        elif isinstance(self.agent, Agent):
+            return self.agent.act(prompt)
+        raise TypeError(f"Unsupported agent type: {type(self.agent)}")
+
     async def _handle_agent_turn(self, prompt: str) -> None:
         if not self.agent:
             return
@@ -548,11 +556,7 @@ class VibeApp(App):
             rendered_prompt = render_path_prompt(
                 prompt, base_dir=self.config.effective_workdir
             )
-            async for event in (
-                self.agent.run(rendered_prompt)
-                if isinstance(self.agent, VibeEngine)
-                else self.agent.act(rendered_prompt)
-            ):
+            async for event in self._get_engine_iterator(rendered_prompt):
                 if self._context_progress and self.agent:
                     current_state = self._context_progress.tokens
                     current_tokens = self.agent.stats.context_tokens
