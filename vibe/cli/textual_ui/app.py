@@ -445,10 +445,14 @@ class VibeApp(App):
             if self.config.use_deepagents:
                 from vibe.core.engine.adapters import ApprovalBridge
 
-                approval_bridge = ApprovalBridge()
+                # Create approval bridge with TUI callback
+                approval_bridge = ApprovalBridge(
+                    config=self.config,
+                    approval_callback=self._handle_approval_decision
+                )
                 agent = VibeEngine(
                     self.config,
-                    approval_callback=approval_bridge,
+                    approval_callback=self._handle_approval_decision,
                     initial_messages=self._loaded_messages,
                 )
             else:
@@ -502,7 +506,13 @@ class VibeApp(App):
 
         return self._agent_init_task
 
-    async def _handle_engine_interrupt(self, interrupt_data: dict[str, Any]) -> None:
+    async def _handle_approval_decision(self, action_request: dict[str, Any]) -> dict[str, Any]:
+        """Handle approval decision from ApprovalBridge callback."""
+        # Show approval dialog and get user decision
+        decision = await self._switch_to_approval_app_from_action(action_request)
+        return decision
+
+    async def _handle_engine_interrupt(self, interrupt_data: dict[str, Any]) -> dict[str, Any]:
         """Handle interrupt from VibeEngine requiring approval."""
         # Extract action request from interrupt data
         data = interrupt_data.get("data", {})
@@ -515,14 +525,10 @@ class VibeApp(App):
                 "description": interrupt_data.get("description", ""),
             }
 
-        # Start approval request and get request_id
-        if isinstance(self.agent, VibeEngine) and self.agent.approval_bridge:
-            request_id = self.agent.approval_bridge.start_approval(action_request)
-            # Store request_id for later use
-            self._current_request_id = request_id
-
-        # Show approval dialog
-        await self._switch_to_approval_app_from_action(action_request)
+        # For DeepAgents with ApprovalBridge, the callback is handled automatically
+        # This method is called by EventHandler, but ApprovalBridge handles the flow
+        # We just need to return a placeholder since the real work happens in the callback
+        return {"approved": True}  # This won't be used when ApprovalBridge is present
 
     async def _approval_callback(
         self, tool: str, args: dict, tool_call_id: str
@@ -860,8 +866,8 @@ class VibeApp(App):
 
     async def _switch_to_approval_app_from_action(
         self, action_request: dict[str, Any]
-    ) -> None:
-        """Switch to approval app for DeepAgents action request."""
+    ) -> dict[str, Any]:
+        """Switch to approval app for DeepAgents action request and return decision."""
         bottom_container = self.query_one("#bottom-app-container")
 
         try:
@@ -873,6 +879,9 @@ class VibeApp(App):
         if self._mode_indicator:
             self._mode_indicator.display = False
 
+        # Use the existing _pending_approval pattern
+        self._pending_approval = asyncio.Future()
+
         approval_app = ApprovalApp(
             action_request=action_request,
             workdir=str(self.config.effective_workdir),
@@ -883,6 +892,17 @@ class VibeApp(App):
 
         self.call_after_refresh(approval_app.focus)
         self.call_after_refresh(self._scroll_to_bottom)
+
+        # Wait for user decision using existing pattern
+        try:
+            result = await self._pending_approval
+            return result
+        except asyncio.TimeoutError:
+            return {
+                "approved": False,
+                "always_approve": False,
+                "feedback": "Approval timeout"
+            }
 
     async def _switch_to_approval_app(self, tool_name: str, tool_args: dict) -> None:
         bottom_container = self.query_one("#bottom-app-container")

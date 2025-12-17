@@ -191,13 +191,13 @@ def build_middleware_stack(
 
         middleware.append(PriceLimitMiddleware(config.max_price, pricing))
 
-        # 4. Human-in-the-loop (for approvals)
-        from vibe.core.engine.permissions import build_interrupt_config
+    # 4. Human-in-the-loop (for approvals) - independent of price limit
+    from vibe.core.engine.permissions import build_interrupt_config
 
-        interrupt_on = build_interrupt_config(config)
-        if interrupt_on:
-            from langchain.agents.middleware import HumanInTheLoopMiddleware
+    interrupt_on = build_interrupt_config(config)
+    if interrupt_on:
+        from langchain.agents.middleware import HumanInTheLoopMiddleware
 
-            middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
+        middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
 
     return middleware

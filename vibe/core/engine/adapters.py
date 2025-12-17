@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel
 from vibe.core.config import VibeConfig
-from vibe.core.tools.base import BaseTool
+from vibe.core.tools.base import BaseTool, ToolPermission
 from vibe.core.tools.manager import ToolManager
 from vibe.core.types import (
     AssistantEvent,
@@ -124,8 +125,26 @@ class EventTranslator:
 class ApprovalBridge:
     """Bridge LangGraph interrupts to Vibe TUI approval flow."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, 
+        config: VibeConfig,
+        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None
+    ) -> None:
+        self.config = config
+        self.approval_callback = approval_callback
         self._pending_approvals: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        # Track session-wide auto-approvals from "Always" option
+        self._session_auto_approve: set[str] = set()
+
+    def _format_action_request_for_ui(self, action_request: dict[str, Any]) -> dict[str, Any]:
+        """Format action request for TUI approval dialog."""
+        # Ensure all required fields are present with defaults
+        return {
+            "name": action_request.get("name", ""),
+            "args": action_request.get("args", {}),
+            "description": action_request.get("description", ""),
+            "tool_call_id": action_request.get("tool_call_id", ""),
+        }
 
     async def handle_interrupt(self, interrupt: dict[str, Any]) -> dict[str, Any]:
         """Handle LangGraph interrupts for approval."""
@@ -134,6 +153,27 @@ class ApprovalBridge:
         if not action_request:
             return {"approved": True}  # Auto-approve if no action request
 
+        tool_name = action_request.get("name", "")
+        tool_args = action_request.get("args", {})
+
+        # Check pattern-based permissions first
+        from vibe.core.engine.permissions import get_effective_permission
+        
+        effective_permission = get_effective_permission(tool_name, tool_args, self.config)
+        
+        match effective_permission:
+            case ToolPermission.ALWAYS:
+                return {"approved": True, "feedback": "Auto-approved by allowlist pattern"}
+            case ToolPermission.NEVER:
+                return {"approved": False, "feedback": "Blocked by denylist pattern"}
+            case ToolPermission.ASK:
+                # Continue to approval flow
+                pass
+
+        # Check if tool is session-wide auto-approved
+        if tool_name in self._session_auto_approve:
+            return {"approved": True, "feedback": f"Auto-approved for session (tool: {tool_name})"}
+
         # Create unique request ID
         request_id = str(uuid4())
 
@@ -141,12 +181,26 @@ class ApprovalBridge:
         future = asyncio.Future()
         self._pending_approvals[request_id] = future
 
-        # In real implementation, this would trigger TUI dialog via callback
-        # For now, auto-approve (will be connected to TUI later)
         try:
-            # Wait for decision with timeout (60 seconds for user interaction)
-            decision = await asyncio.wait_for(future, timeout=60.0)
-            return decision
+            if self.approval_callback:
+                # Format action request for TUI
+                ui_request = self._format_action_request_for_ui(action_request)
+                
+                # Wait for decision with timeout (60 seconds for user interaction)
+                decision = await asyncio.wait_for(
+                    self.approval_callback(ui_request), 
+                    timeout=60.0
+                )
+                
+                # Handle "Always" option - add to session auto-approve
+                if decision.get("approved") and decision.get("always_approve", False):
+                    self._session_auto_approve.add(tool_name)
+                
+                return decision
+            else:
+                # Auto-approve if no callback provided (programmatic mode)
+                return {"approved": True, "feedback": "Auto-approved (no approval callback)"}
+                
         except asyncio.TimeoutError:
             # Auto-reject on timeout
             if request_id in self._pending_approvals:

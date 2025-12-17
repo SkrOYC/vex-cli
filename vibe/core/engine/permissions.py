@@ -110,6 +110,41 @@ def matches_pattern(tool_name: str, args: dict[str, Any], pattern: str) -> bool:
     return False
 
 
+def get_effective_permission(
+    tool_name: str, args: dict[str, Any], config: VibeConfig
+) -> ToolPermission:
+    """Get effective permission for a tool call, considering patterns.
+    
+    This function evaluates allowlist/denylist patterns at interrupt time
+    to determine if a tool call should be auto-approved, auto-rejected,
+    or require user approval.
+    
+    Args:
+        tool_name: Name of the tool being called
+        args: Arguments passed to the tool
+        config: VibeConfig containing tool permissions and patterns
+        
+    Returns:
+        ToolPermission.ALWAYS if allowlisted or base permission is ALWAYS
+        ToolPermission.NEVER if denylisted or base permission is NEVER
+        ToolPermission.ASK if no pattern matches and base permission is ASK
+    """
+    # First check if tool has explicit config
+    tool_config = config.tools.get(tool_name)
+    if not tool_config:
+        # Default to ASK for unknown tools
+        return ToolPermission.ASK
+    
+    # Check pattern-based permissions first (highest priority)
+    pattern_permission = check_allowlist_denylist(tool_name, args, config)
+    if pattern_permission != tool_config.permission:
+        # Pattern override takes precedence
+        return pattern_permission
+    
+    # Fall back to base permission
+    return tool_config.permission
+
+
 def build_interrupt_config(config: VibeConfig) -> dict[str, Any]:
     """Build interrupt config from Vibe tool permissions with pattern support."""
     interrupt_on = {}
