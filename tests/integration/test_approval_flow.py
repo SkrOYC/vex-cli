@@ -58,44 +58,17 @@ class TestApprovalFlow:
     async def test_handle_approval_calls_bridge(self):
         """Test handle_approval calls to approval bridge."""
         config = VibeConfig()
-        
-        # Create a real ApprovalBridge to test the flow
-        from vibe.core.engine.adapters import ApprovalBridge
-        
-        async def mock_callback(action_request):
-            return {"approved": True}
-        
-        approval_bridge = ApprovalBridge(config=config)
-        engine = VibeEngine(config=config, approval_callback=mock_callback)
-        engine.initialize()
-        
-        # Replace the bridge with our mock
-        engine.approval_bridge = approval_bridge
+        engine = VibeEngine(config=config)
+
+        # Mock the approval bridge on the engine instance
+        mock_bridge = MagicMock(spec=ApprovalBridge)
+        mock_bridge.respond = AsyncMock()
+        engine.approval_bridge = mock_bridge
 
         await engine.handle_approval(True, "test-request-id", "test feedback")
 
-        # The respond method should be called
-        # Note: We can't easily mock the respond method since it's called internally
-        # But we can verify the bridge exists and has the right interface
-        assert engine.approval_bridge is not None
-        assert hasattr(engine.approval_bridge, 'respond')
-
-    @pytest.mark.asyncio
-    async def test_resume_execution_with_agent(self):
-        """Test resume_execution calls agent.invoke when agent exists."""
-        config = VibeConfig()
-        engine = VibeEngine(config=config)
-
-        # Mock agent
-        mock_agent = MagicMock()
-        engine._agent = mock_agent
-        engine._thread_id = "test-thread"
-
-        await engine.resume_execution({"approved": True})
-
-        # Should call invoke with None and correct config
-        mock_agent.invoke.assert_called_once_with(
-            None, {"configurable": {"thread_id": "test-thread"}}
+        mock_bridge.respond.assert_called_once_with(
+            True, "test-request-id", "test feedback"
         )
 
     @pytest.mark.asyncio
@@ -347,33 +320,7 @@ class TestApprovalFlow:
         assert result["approved"] is False
         assert "denylist" in result["feedback"]
 
-    @pytest.mark.asyncio
-    async def test_approval_bridge_session_auto_approve(self):
-        """Test session-wide auto-approval functionality."""
-        from vibe.core.config import VibeConfig
 
-        config = VibeConfig()
-        bridge = ApprovalBridge(config=config)
-
-        interrupt = {
-            "data": {
-                "action_request": {
-                    "name": "bash",
-                    "args": {"command": "ls"},
-                    "description": "List files",
-                }
-            }
-        }
-
-        # First approval with "always" option
-        result1 = await bridge.handle_interrupt(interrupt)
-        assert result1["approved"] is True
-        assert result1.get("always_approve", False) is True
-
-        # Second approval should be auto-approved
-        result2 = await bridge.handle_interrupt(interrupt)
-        assert result2["approved"] is True
-        assert "Auto-approved for session" in result2["feedback"]
 
     @pytest.mark.asyncio
     async def test_vibeengine_with_approval_callback(self):

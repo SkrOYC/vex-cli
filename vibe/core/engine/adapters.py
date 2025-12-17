@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from vibe.core.config import VibeConfig
+from vibe.core.engine.permissions import get_effective_permission
 from vibe.core.tools.base import BaseTool, ToolPermission
 from vibe.core.tools.manager import ToolManager
 from vibe.core.types import (
@@ -157,8 +158,6 @@ class ApprovalBridge:
         tool_args = action_request.get("args", {})
 
         # Check pattern-based permissions first
-        from vibe.core.engine.permissions import get_effective_permission
-        
         effective_permission = get_effective_permission(tool_name, tool_args, self.config)
         
         match effective_permission:

@@ -443,13 +443,6 @@ class VibeApp(App):
         self._agent_initializing = True
         try:
             if self.config.use_deepagents:
-                from vibe.core.engine.adapters import ApprovalBridge
-
-                # Create approval bridge with TUI callback
-                approval_bridge = ApprovalBridge(
-                    config=self.config,
-                    approval_callback=self._handle_approval_decision
-                )
                 agent = VibeEngine(
                     self.config,
                     approval_callback=self._handle_approval_decision,

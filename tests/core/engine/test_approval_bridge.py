@@ -70,14 +70,13 @@ class TestApprovalBridge:
     async def test_session_auto_approve_functionality(self):
         """Test session-wide auto-approval tracking."""
         config = VibeConfig()
-        bridge = ApprovalBridge(config=config)
-
+    
         # Mock callback that always approves with "always" option
         async def mock_callback(action_request):
             return {"approved": True, "always_approve": True, "feedback": None}
-
+    
         bridge = ApprovalBridge(config=config, approval_callback=mock_callback)
-
+    
         interrupt = {
             "data": {
                 "action_request": {
@@ -87,7 +86,7 @@ class TestApprovalBridge:
                 }
             }
         }
-
+    
         # First call should add to session auto-approve
         result1 = await bridge.handle_interrupt(interrupt)
         assert result1["approved"] is True
