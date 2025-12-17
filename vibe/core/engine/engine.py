@@ -19,7 +19,7 @@ from vibe.core.engine.middleware import build_middleware_stack
 from vibe.core.engine.models import create_model_from_config
 from vibe.core.engine.tools import VibeToolAdapter
 from vibe.core.interaction_logger import InteractionLogger
-from vibe.core.types import AgentStatsProtocol, BaseEvent, LLMMessage
+from vibe.core.types import AgentStatsProtocol, BaseEvent, LLMMessage, ToolResultEvent
 
 
 class VibeEngineStats:
@@ -92,6 +92,9 @@ class VibeEngine:
         #     config.effective_workdir,
         # )
         self.interaction_logger = None  # Placeholder
+
+        # Initialize stats object to track metrics
+        self._stats = VibeEngineStats()
 
         # Check if DeepAgents should be used based on the feature flag
         self._use_deepagents = config.use_deepagents
@@ -166,9 +169,22 @@ class VibeEngine:
             config=config,  # type: ignore
             version="v2",  # type: ignore
         ):
+            # Update token stats from raw event data before translation
+            self._update_token_stats_from_event(event)
+
             # Translate DeepAgents events to Vibe TUI events
             translated = self.event_translator.translate(event)
             if translated is not None:
+                # Update stats based on the event type
+                if isinstance(translated, ToolResultEvent):
+                    # Check if the tool result indicates success
+                    if translated.error is not None or translated.skipped:
+                        # Increment failed tool calls
+                        self._update_tool_call_stats(success=False)
+                    else:
+                        # Increment successful tool calls
+                        self._update_tool_call_stats(success=True)
+
                 yield translated
 
     async def handle_approval(
@@ -269,28 +285,55 @@ class VibeEngine:
         """Clear conversation history."""
         self.reset()  # Reset achieves the same effect
 
+    def get_current_messages(self) -> list:
+        """Get the current conversation messages from the agent state."""
+        if self._agent is not None:
+            state = self._agent.get_state(  # type: ignore
+                {"configurable": {"thread_id": self._thread_id}}
+            )
+            return state.values.get("messages", [])
+        return []
+
     def get_log_path(self) -> str | None:
         """Get the path to the current session's log file."""
         # TODO: Implement proper log path retrieval when interaction logger is added
         return None  # Placeholder
 
     @property
+    def session_id(self) -> str:
+        """Get the session ID/thread ID for this engine."""
+        return self._thread_id
+
+    @property
     def stats(self) -> "VibeEngineStats":
         """Get current session statistics."""
-        if self._agent is None:
-            return VibeEngineStats(messages=0, context_tokens=0, todos=[])
+        # Use the persistent stats object and update context-related values
+        if self._agent is not None:
+            # Extract from LangGraph state
+            state = self._agent.get_state(  # type: ignore
+                {"configurable": {"thread_id": self._thread_id}}
+            )
+            messages = state.values.get("messages", [])
+            context_tokens = self._estimate_tokens(messages)
+            self._stats.context_tokens = context_tokens
+            self._stats._messages = len(messages)
+            # Update todos if available in state
+            todos = state.values.get("todos", [])
+            self._stats._todos = todos
 
-        # Extract from LangGraph state
-        state = self._agent.get_state(  # type: ignore
-            {"configurable": {"thread_id": self._thread_id}}
-        )
-        messages = state.values.get("messages", [])
-        context_tokens = self._estimate_tokens(messages)
-        todos = state.values.get("todos", [])
+        return self._stats
 
-        return VibeEngineStats(
-            messages=len(messages), context_tokens=context_tokens, todos=todos
-        )
+    def _update_tool_call_stats(self, success: bool) -> None:
+        """Update tool call statistics based on success/failure."""
+        if (
+            hasattr(self, "stats")
+            and hasattr(self.stats, "tool_calls_succeeded")
+            and hasattr(self.stats, "tool_calls_failed")
+        ):
+            if success:
+                self.stats.tool_calls_succeeded += 1
+            else:
+                self.stats.tool_calls_failed += 1
 
     def _estimate_tokens(self, messages: list) -> int:
         """Estimate token count from messages using actual token metadata if available."""
@@ -320,3 +363,29 @@ class VibeEngine:
                     total_tokens += len(str(content)) // 4
 
         return total_tokens
+
+    def _update_token_stats_from_event(self, event) -> None:
+        """Update token statistics from event (can be dict or StreamEvent object)."""
+        # Handle both dict and StreamEvent objects
+        if not isinstance(event, dict):
+            # Convert StreamEvent to dict-like structure if possible
+            event_data = event.__dict__ if hasattr(event, "__dict__") else {}
+        else:
+            event_data = event
+
+        event_type = event_data.get("event")
+
+        # Extract token usage from model response events
+        if event_type == "on_chat_model_stream":
+            chunk = event_data.get("data", {}).get("chunk")
+            if chunk and hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+                usage = chunk.usage_metadata
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+
+                # Update the persistent stats object
+                self._stats.session_prompt_tokens += input_tokens
+                self._stats.session_completion_tokens += output_tokens
+                self._stats.last_turn_prompt_tokens = input_tokens
+                self._stats.last_turn_completion_tokens = output_tokens
+                self._stats.context_tokens = input_tokens + output_tokens

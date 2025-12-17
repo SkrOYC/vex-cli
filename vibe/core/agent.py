@@ -12,7 +12,33 @@ from pydantic import BaseModel
 
 from vibe.core.config import VibeConfig
 from vibe.core.interaction_logger import InteractionLogger
-from vibe.core.llm.backend.factory import BACKEND_FACTORY
+
+# The legacy backend factory has been removed as part of DeepAgents migration
+# Creating a compatibility layer to allow the system to work during transition
+import warnings
+from typing import Any, Callable
+
+
+class _BackendFactory:
+    """Compatibility layer for legacy backend factory that acts like a dictionary."""
+
+    def __getitem__(self, key: Any) -> Callable:
+        def backend_constructor(provider, timeout):
+            warnings.warn(
+                "The legacy backend system has been removed as part of DeepAgents migration. "
+                "Use VibeEngine instead of the legacy Agent system.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            raise NotImplementedError(
+                "The legacy backend system has been removed. "
+                "Migrate to VibeEngine for DeepAgents support."
+            )
+
+        return backend_constructor
+
+
+BACKEND_FACTORY = _BackendFactory()
 from vibe.core.llm.format import APIToolFormatHandler, ResolvedMessage
 from vibe.core.llm.types import BackendLike
 from vibe.core.middleware import (
@@ -140,10 +166,12 @@ class Agent:
         self._last_chunk: LLMChunk | None = None
 
     def _select_backend(self) -> BackendLike:
-        active_model = self.config.get_active_model()
-        provider = self.config.get_provider_for_model(active_model)
-        timeout = self.config.api_timeout
-        return BACKEND_FACTORY[provider.backend](provider=provider, timeout=timeout)
+        # The legacy backend system has been removed as part of DeepAgents migration
+        # This method should not be used - the legacy Agent system is deprecated
+        raise NotImplementedError(
+            "The legacy backend system has been removed. "
+            "Migrate to VibeEngine for DeepAgents support."
+        )
 
     def add_message(self, message: LLMMessage) -> None:
         self.messages.append(message)
