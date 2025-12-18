@@ -37,7 +37,7 @@ class ToolUIDataAdapter:
     def __init__(self, tool_class: Any) -> None:
         self.tool_class = tool_class
         self.ui_data_class: type[ToolUIData[Any, Any]] | None = (
-            tool_class if issubclass(tool_class, ToolUIData) else None
+            tool_class if tool_class and issubclass(tool_class, ToolUIData) else None
         )
 
     def get_call_display(self, event: ToolCallEvent) -> ToolCallDisplay:
