@@ -124,3 +124,38 @@ jobs:
         run: |
           echo "Snapshot tests failed, failing job."
           exit 1
+
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Install uv with caching
+        uses: actions/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Run performance benchmarks
+        run: |
+          uv run pytest tests/performance/test_benchmarks.py \
+            --benchmark-json=benchmark.json
+
+      - name: Comment PR with benchmark results
+        if: github.event_name == 'pull_request'
+        uses: benchmark-action/github-action@v1
+        with:
+          tool: 'pytest'
+          output-file-path: benchmark.json
