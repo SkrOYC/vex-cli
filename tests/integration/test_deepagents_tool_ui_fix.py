@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from vibe.core.engine.adapters import EventTranslator
 from vibe.core.tools.ui import ToolUIDataAdapter
 from vibe.core.types import ToolResultEvent
 
 
-def test_event_translator_creates_tool_result_event_with_none_tool_class():
-    """Test that EventTranslator creates ToolResultEvent with tool_class=None for DeepAgents tools."""
+def test_adapter_handles_result_event_with_none_tool_class():
+    """Test that ToolUIDataAdapter handles a ToolResultEvent with tool_class=None."""
     # This simulates the scenario described in the issue where DeepAgents middleware
     # provides tools that are not registered in the legacy ToolManager
     
@@ -22,7 +21,7 @@ def test_event_translator_creates_tool_result_event_with_none_tool_class():
         result=None
     )
     
-    # This should not crash the ToolUIDataAdapter
+    # This should not crash ToolUIDataAdapter
     adapter = ToolUIDataAdapter(None)
     display = adapter.get_result_display(event)
     
