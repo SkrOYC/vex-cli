@@ -1,4 +1,9 @@
-"""Model factory for creating LangChain models from Vibe configuration."""
+"""Model factory for creating LangChain models from Vibe configuration.
+
+This module is responsible for instantiating chat models. It no longer
+contains token estimation logic; token counting is handled by the engine using
+real API usage metadata.
+"""
 
 import os
 
@@ -37,67 +42,3 @@ def create_model_from_config(config: VibeConfig) -> BaseChatModel:
         return ChatOpenAI(**kwargs)
     else:
         raise ValueError(f"Unknown backend: {provider_config.backend}")
-
-
-def estimate_tokens_for_messages(
-    model: BaseChatModel, messages: list[BaseMessage]
-) -> int:
-    """Estimate token count for messages using the model's tokenizer when available."""
-    # If the model has a built-in token counter, use it
-    if hasattr(model, "get_num_tokens_from_messages"):
-        try:
-            return model.get_num_tokens_from_messages(messages)
-        except Exception as e:
-            # Log the exception for debugging while falling back to estimation
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.debug(f"Failed to count tokens using get_num_tokens_from_messages: {e}")
-            pass  # Fall back to estimation if the method fails
-
-    # If the model has a get_num_tokens method, use it for individual messages
-    if hasattr(model, "get_num_tokens"):
-        try:
-            total_tokens = 0
-            for msg in messages:
-                content = getattr(msg, "content", str(msg))
-                if isinstance(content, list):
-                    # Handle list of content parts (e.g., multimodal)
-                    for part in content:
-                        if isinstance(part, str):
-                            total_tokens += model.get_num_tokens(part)
-                        elif isinstance(part, dict) and "text" in part:
-                            total_tokens += model.get_num_tokens(
-                                str(part.get("text", ""))
-                            )
-                        else:
-                            total_tokens += model.get_num_tokens(str(part))
-                elif isinstance(content, str):
-                    total_tokens += model.get_num_tokens(content)
-                else:
-                    total_tokens += model.get_num_tokens(str(content))
-            return total_tokens
-        except Exception as e:
-            # Log the exception for debugging while falling back to estimation
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.debug(f"Failed to count tokens using get_num_tokens: {e}")
-            pass  # Fall back to estimation if the method fails
-
-    # Fallback: rough estimation (4 characters per token)
-    total_chars = 0
-    for msg in messages:
-        content = getattr(msg, "content", str(msg))
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, str):
-                    total_chars += len(part)
-                elif isinstance(part, dict) and "text" in part:
-                    total_chars += len(str(part.get("text", "")))
-                else:
-                    total_chars += len(str(part))
-        elif isinstance(content, str):
-            total_chars += len(content)
-        else:
-            total_chars += len(str(content))
-
-    return max(1, total_chars // 4)  # At least 1 token
