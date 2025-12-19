@@ -338,6 +338,11 @@ class VibeConfig(BaseSettings):
     enable_planning: bool = Field(default=True)
     max_recursion_depth: int = Field(default=1000)
 
+    # Summarization settings (for future DeepAgents customization)
+    enable_summarization: bool = Field(default=False)
+    summarization_trigger_tokens: int = Field(default=170000)
+    summarization_keep_messages: int = Field(default=6)
+
     model_config = SettingsConfigDict(
         env_prefix="VIBE_", case_sensitive=False, extra="ignore"
     )
@@ -477,6 +482,32 @@ class VibeConfig(BaseSettings):
     @model_validator(mode="after")
     def _check_system_prompt(self) -> VibeConfig:
         _ = self.system_prompt
+        return self
+
+    @model_validator(mode="after")
+    def validate_summarization_config(self) -> VibeConfig:
+        """Validate summarization configuration settings."""
+        if self.enable_summarization:
+            if self.summarization_trigger_tokens < 50000:
+                raise ValueError(
+                    "Summarization trigger must be >= 50000 tokens "
+                    f"(got {self.summarization_trigger_tokens})"
+                )
+            if self.summarization_keep_messages < 2:
+                raise ValueError(
+                    "Must keep at least 2 messages after summarization "
+                    f"(got {self.summarization_keep_messages})"
+                )
+            if self.summarization_trigger_tokens < self.auto_compact_threshold:
+                import warnings
+
+                warnings.warn(
+                    f"Summarization trigger ({self.summarization_trigger_tokens:,} tokens) is less than "
+                    f"auto compact threshold ({self.auto_compact_threshold:,} tokens). "
+                    "Consider adjusting values for optimal performance.",
+                    UserWarning,
+                    stacklevel=2,
+                )
         return self
 
     @classmethod
