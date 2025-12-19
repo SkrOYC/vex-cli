@@ -92,6 +92,7 @@ dev = [
     "typos>=1.34.0",
     "vulture>=2.14",
     "pytest-xdist>=3.8.0",
+    "psutil>=5.9.0",
 ]
 
 build = ["pyinstaller>=6.17.0"]

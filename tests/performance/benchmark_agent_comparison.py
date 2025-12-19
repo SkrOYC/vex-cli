@@ -1,24 +1,27 @@
 """Benchmark comparison script for Agent vs VibeEngine."""
 
-import asyncio
 import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, Any
 
-import pytest
-
 
 def run_benchmarks(output_file: str) -> Dict[str, Any]:
     """Run benchmarks and return results."""
     # Run pytest with benchmark
-    result = subprocess.run([
-        sys.executable, "-m", "pytest",
-        "tests/performance/test_benchmarks.py",
-        f"--benchmark-json={output_file}",
-        "--tb=short"
-    ], capture_output=True, text=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/performance/test_benchmarks.py",
+            f"--benchmark-json={output_file}",
+            "--tb=short",
+        ],
+        capture_output=True,
+        text=True,
+    )
 
     if result.returncode != 0:
         print("Error running benchmarks:")
@@ -26,11 +29,38 @@ def run_benchmarks(output_file: str) -> Dict[str, Any]:
         return {}
 
     # Load results
-    with open(output_file, 'r') as f:
+    with open(output_file, "r") as f:
         return json.load(f)
 
 
-def generate_html_report(agent_results: Dict[str, Any], vibe_results: Dict[str, Any] | None = None) -> str:
+def extract_benchmark_table(
+    agent_results: Dict[str, Any], vibe_results: Dict[str, Any] | None = None
+) -> str:
+    """Extract benchmark data from pytest-benchmark JSON structure."""
+    if not agent_results.get("benchmarks"):
+        return "<tr><td colspan='4'>No benchmark data available</td></tr>"
+
+    rows = []
+    for benchmark in agent_results["benchmarks"]:
+        name = benchmark["name"]
+        mean_time = (
+            benchmark["stats"].get("mean", 0) * 1000000
+        )  # Convert to microseconds
+        rows.append(f"""
+        <tr>
+            <td>{name}</td>
+            <td>{mean_time:.2f}</td>
+            <td>N/A</td>
+            <td>N/A</td>
+        </tr>
+        """)
+
+    return "".join(rows)
+
+
+def generate_html_report(
+    agent_results: Dict[str, Any], vibe_results: Dict[str, Any] | None = None
+) -> str:
     """Generate HTML comparison report."""
     html = f"""
 <!DOCTYPE html>
@@ -57,13 +87,8 @@ def generate_html_report(agent_results: Dict[str, Any], vibe_results: Dict[str, 
             <th>VibeEngine (ms)</th>
             <th>Difference</th>
         </tr>
-        <!-- Placeholder for actual results -->
-        <tr>
-            <td>Simple Conversation</td>
-            <td>{agent_results.get('simple_conv', 'N/A')}</td>
-            <td>{vibe_results.get('simple_conv', 'N/A')}</td>
-            <td>N/A</td>
-        </tr>
+        <!-- Extract actual results from pytest-benchmark JSON structure -->
+        {extract_benchmark_table(agent_results, vibe_results)}
     </table>
 
     <h2>Memory Usage</h2>
@@ -81,11 +106,10 @@ def generate_html_report(agent_results: Dict[str, Any], vibe_results: Dict[str, 
 
 def main():
     """Main comparison script."""
-    iterations = int(sys.argv[1]) if len(sys.argv) > 1 else 5
     output_dir = Path("benchmark_results")
     output_dir.mkdir(exist_ok=True)
 
-    print(f"Running benchmarks with {iterations} iterations...")
+    print("Running benchmarks...")
 
     # Run benchmarks (currently only Agent is implemented)
     benchmark_output = output_dir / "benchmark_results.json"
@@ -93,9 +117,11 @@ def main():
     results = run_benchmarks(str(benchmark_output))
 
     # Generate HTML report (placeholder for comparison)
-    html_report = generate_html_report(results, {})  # Agent results, empty VibeEngine for now
+    html_report = generate_html_report(
+        results, {}
+    )  # Agent results, empty VibeEngine for now
     report_file = output_dir / "benchmark_report.html"
-    with open(report_file, 'w') as f:
+    with open(report_file, "w") as f:
         f.write(html_report)
 
     print(f"Report generated: {report_file}")
