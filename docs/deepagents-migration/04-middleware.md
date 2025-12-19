@@ -348,9 +348,50 @@ SubAgentMiddleware(
 - [ ] TodoListMiddleware provides todo tools
 - [ ] FilesystemMiddleware provides file tools
 - [ ] SubAgentMiddleware enables delegation
-- [ ] SummarizationMiddleware handles context
+- [ ] SummarizationMiddleware handles context (with limitations)
 - [ ] Context warnings display in TUI
 - [ ] Price limits stop execution
 - [ ] HITL interrupts work with TUI approval
 - [ ] Middleware stack executes in correct order
 - [ ] No regressions from old middleware
+
+## SummarizationMiddleware Limitations
+
+### Current State (v1.2.0)
+- **DeepAgents provides SummarizationMiddleware by default** with hardcoded settings
+- **No customization available** - trigger/keep values are hardcoded (85%/10% or 170k/6 messages)
+- **Duplicate middleware instances**: SummarizationMiddleware appears in both main agent and subagent stacks
+- **vex-cli configuration fields are ready** but cannot be used until DeepAgents supports customization
+
+### Configuration Support (Ready for Future)
+vex-cli has added configuration support for future DeepAgents customization:
+
+```python
+# In vibe/core/config.py
+class VibeConfig(BaseSettings):
+    # Summarization settings (for future DeepAgents customization)
+    enable_summarization: bool = Field(default=False)
+    summarization_trigger_tokens: int = Field(default=170000)
+    summarization_keep_messages: int = Field(default=6)
+```
+
+### Current Recommendations
+1. **Use DeepAgents defaults** - They provide sensible automatic summarization
+2. **Monitor context usage** with existing `ContextWarningMiddleware`
+3. **Manual compaction** via `auto_compact_threshold` when needed
+4. **Configuration fields are ready** for when DeepAgents supports customization
+
+### Future Enhancement Needed
+DeepAgents library needs to expose SummarizationMiddleware parameters in `create_deep_agent()`:
+
+```python
+# Proposed enhancement
+def create_deep_agent(
+    ...,
+    summarization_trigger: ContextSize | None = None,
+    summarization_keep: ContextSize | None = None,
+    ...
+):
+```
+
+Until then, vex-cli configuration cannot be fully utilized without causing duplicate middleware.
