@@ -85,12 +85,14 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-timeout>=2.4.0",
     "pytest-textual-snapshot>=1.1.0",
+    "pytest-benchmark>=4.0.0",
     "respx>=0.22.0",
     "ruff>=0.14.5",
     "twine>=5.0.0",
     "typos>=1.34.0",
     "vulture>=2.14",
     "pytest-xdist>=3.8.0",
+    "psutil>=5.9.0",
 ]
 
 build = ["pyinstaller>=6.17.0"]
