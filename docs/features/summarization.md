@@ -30,7 +30,6 @@ There is currently **no way to customize** DeepAgents' SummarizationMiddleware s
 These configuration fields are available in `vibe/config.toml`:
 
 ```toml
-[deepagents]
 # Enable/disable summarization (future use)
 enable_summarization = false
 

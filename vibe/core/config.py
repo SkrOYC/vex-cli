@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shlex
 import tomllib
+import warnings
 from typing import Annotated, Any, Literal
 
 from dotenv import dotenv_values
@@ -498,16 +499,14 @@ class VibeConfig(BaseSettings):
                     "Must keep at least 2 messages after summarization "
                     f"(got {self.summarization_keep_messages})"
                 )
-            if self.summarization_trigger_tokens < self.auto_compact_threshold:
-                import warnings
-
-                warnings.warn(
-                    f"Summarization trigger ({self.summarization_trigger_tokens:,} tokens) is less than "
-                    f"auto compact threshold ({self.auto_compact_threshold:,} tokens). "
-                    "Consider adjusting values for optimal performance.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+        if self.summarization_trigger_tokens < self.auto_compact_threshold:
+            warnings.warn(
+                f"Summarization trigger ({self.summarization_trigger_tokens:,} tokens) is less than "
+                f"auto compact threshold ({self.auto_compact_threshold:,} tokens). "
+                "Consider adjusting values for optimal performance.",
+                UserWarning,
+                stacklevel=2,
+            )
         return self
 
     @classmethod

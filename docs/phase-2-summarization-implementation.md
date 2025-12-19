@@ -60,16 +60,70 @@ This issue tracks the integration of SummarizationMiddleware configuration in ve
 ### Integration Pattern
 ```python
 # In vibe/core/engine/middleware.py
-if config.enable_summarization and config.use_deepagents:
-    from langchain.agents.middleware.summarization import SummarizationMiddleware
+from langchain.agents.middleware.summarization import SummarizationMiddleware
+
+def build_middleware_stack(
+    config: VibeConfig,
+    model: "BaseChatModel",  # type: ignore
+    backend: "BackendProtocol",  # type: ignore
+) -> list[AgentMiddleware]:
+    """Build the complete middleware stack for the agent.
     
-    middleware.append(
-        SummarizationMiddleware(
-            model=model,
-            trigger=("tokens", config.summarization_trigger_tokens),
-            keep=("messages", config.summarization_keep_messages),
+    Order is important for correct execution:
+    1. Subagents (SubAgentMiddleware, optional) - DeepAgents provides TodoList and Filesystem by default
+    2. Context warnings (ContextWarningMiddleware, Vibe-specific)
+    3. Price limit (PriceLimitMiddleware, Vibe-specific)
+    4. Human-in-the-loop (HumanInTheLoopMiddleware, for approvals)
+    """
+    from langchain.agents.middleware import HumanInTheLoopMiddleware
+    from deepagents.middleware.subagents import SubAgentMiddleware
+
+    middleware: list[AgentMiddleware] = []
+    
+    # DeepAgents provides TodoListMiddleware, FilesystemMiddleware, and SubAgentMiddleware by default
+    # Only add custom middleware that's not already provided by DeepAgents
+    
+    # 1. Subagents (optional, Vibe-specific) - handled by DeepAgents automatically
+    # Note: Don't add SubAgentMiddleware manually as it causes duplicate middleware error
+    
+    # 2. Context warnings (Vibe-specific)
+    if config.context_warnings:
+        middleware.append(
+            ContextWarningMiddleware(
+                threshold_percent=0.5, max_context=config.auto_compact_threshold
+            )
         )
-    )
+    
+    # 3. Price limit (Vibe-specific)
+    if config.max_price is not None:
+        # Get pricing from model config
+        pricing = {}
+        for model_config in config.models:
+            pricing[model_config.name] = (
+                model_config.input_price / 1_000_000,  # Convert to per-token rate
+                model_config.output_price / 1_000_000,
+            )
+    
+        middleware.append(PriceLimitMiddleware(config.max_price, pricing))
+    
+    # 4. Summarization (if enabled)
+    if config.enable_summarization and config.use_deepagents:
+        middleware.append(
+            SummarizationMiddleware(
+                model=model,
+                trigger=("tokens", config.summarization_trigger_tokens),
+                keep=("messages", config.summarization_keep_messages),
+            )
+        )
+    
+    # 5. Human-in-the-loop (for approvals) - independent of price limit
+    from vibe.core.engine.permissions import build_interrupt_config
+    
+    interrupt_on = build_interrupt_config(config)
+    if interrupt_on:
+        middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
+    
+    return middleware
 ```
 
 ### Validation
