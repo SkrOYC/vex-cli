@@ -1,7 +1,8 @@
 """Model factory for creating LangChain models from Vibe configuration.
 
-This module creates model instances and relies on real token usage data
-from API responses (usage_metadata) rather than token estimation.
+This module is responsible for instantiating chat models. It no longer
+contains token estimation logic; token counting is handled by the engine using
+real API usage metadata.
 """
 
 import os
