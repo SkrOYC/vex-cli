@@ -76,7 +76,7 @@ class VibeLangChainEngine:
         self.approval_callback = approval_callback
         self._agent: CompiledStateGraph | None = None
         self._checkpointer = InMemorySaver()
-        self._thread_id = "vibe-session"
+        self._thread_id = f"vibe-session-{uuid4()}"
         self._stats = VibeEngineStats()
 
     def _create_model(self) -> Any:
@@ -185,7 +185,7 @@ class VibeLangChainEngine:
             yield event
 
     async def handle_approval(
-        self, approved: bool, request_id: str, feedback: str | None = None
+        self, approved: bool, feedback: str | None = None
     ) -> None:
         """Handle approval decision from TUI."""
         if self._agent is None:
@@ -208,7 +208,6 @@ class VibeLangChainEngine:
         """Resume execution after approval."""
         await self.handle_approval(
             approved=decision.get("approved", False),
-            request_id="",
             feedback=decision.get("feedback"),
         )
 
@@ -216,7 +215,6 @@ class VibeLangChainEngine:
         """Reject execution and abort operation."""
         await self.handle_approval(
             approved=False,
-            request_id="",
             feedback=decision.get("feedback", "Operation rejected by user"),
         )
 
@@ -226,7 +224,7 @@ class VibeLangChainEngine:
         self._thread_id = f"vibe-session-{uuid4()}"
         self._agent = None
 
-    async def compact(self) -> str:
+    def compact(self) -> str:
         """Compact conversation history to reduce context size."""
         if self._agent is None:
             return "No active conversation to compact"
@@ -245,9 +243,13 @@ class VibeLangChainEngine:
         old_tokens = self._get_actual_token_count(messages)
         new_tokens = self._get_actual_token_count(compacted_messages)
 
+        # Update state with compacted messages
+        config: RunnableConfig = {"configurable": {"thread_id": self._thread_id}}
+        self._agent.update_state(config, {"messages": compacted_messages})
+
         return f"Compacted {len(messages)} messages to {len(compacted_messages)} messages, reducing tokens from {old_tokens} to {new_tokens}"
 
-    async def clear_history(self) -> None:
+    def clear_history(self) -> None:
         """Clear conversation history."""
         self.reset()
 

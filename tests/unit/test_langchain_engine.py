@@ -14,7 +14,7 @@ class TestVibeLangChainEngine:
 
         assert engine._agent is None
         assert engine.config == langchain_config
-        assert engine._thread_id == "vibe-session"
+        assert engine._thread_id.startswith("vibe-session-")
         assert isinstance(engine._stats, VibeEngineStats)
 
     def test_initialization_with_approval_callback(self, langchain_config: VibeConfig):
@@ -103,9 +103,10 @@ class TestVibeLangChainEngine:
         engine = VibeLangChainEngine(config)
         middleware = engine._build_middleware_stack()
 
-        # Should only have HumanInTheLoopMiddleware if there are tools requiring approval
-        # With empty tool config, interrupt_on will be empty, so no HITL middleware
-        assert isinstance(middleware, list)
+        # Should have HumanInTheLoopMiddleware since default tools require approval
+        assert len(middleware) >= 1
+        from langchain.agents.middleware import HumanInTheLoopMiddleware
+        assert any(isinstance(m, HumanInTheLoopMiddleware) for m in middleware)
 
     def test_pricing_config(self, langchain_config: VibeConfig):
         """Test pricing configuration is generated correctly."""
