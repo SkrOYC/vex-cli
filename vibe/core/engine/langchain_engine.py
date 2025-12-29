@@ -93,6 +93,20 @@ class VibeLangChainEngine:
         tool_manager = ToolManager(self.config)
         return get_universal_system_prompt(tool_manager, self.config)
 
+    def _get_pricing_config(self) -> dict[str, tuple[float, float]]:
+        """Get pricing configuration from model configs.
+
+        Returns dict mapping model names to (input_rate, output_rate) tuples.
+        Rates are per-token (not per-million-tokens).
+        """
+        pricing = {}
+        for model_config in self.config.models:
+            pricing[model_config.name] = (
+                model_config.input_price / 1_000_000,
+                model_config.output_price / 1_000_000,
+            )
+        return pricing
+
     def _build_middleware_stack(self) -> list[AgentMiddleware]:
         """Build the custom middleware stack for LangChain 1.2.0."""
         middleware: list[AgentMiddleware] = []
@@ -112,17 +126,10 @@ class VibeLangChainEngine:
         if self.config.max_price is not None:
             from vibe.core.engine.middleware import PriceLimitMiddleware
 
-            pricing = {}
-            for model_config in self.config.models:
-                pricing[model_config.name] = (
-                    model_config.input_price / 1_000_000,
-                    model_config.output_price / 1_000_000,
-                )
-
             middleware.append(
                 PriceLimitMiddleware(
                     max_price=self.config.max_price,
-                    pricing=pricing,
+                    pricing=self._get_pricing_config(),
                 )
             )
 
