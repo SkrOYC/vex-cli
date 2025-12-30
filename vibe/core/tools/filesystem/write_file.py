@@ -25,9 +25,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import time
-from typing import ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
 from vibe.core.tools.filesystem.shared import ViewTrackerService
@@ -101,8 +100,10 @@ class WriteFileToolState(BaseToolState):
         file_exists_operations: Tracks file exists error flow by file path.
     """
 
-    warned_operations: ClassVar[dict[str, dict[str, int | str]]] = {}
-    file_exists_operations: ClassVar[dict[str, dict[str, int]]] = {}
+    model_config = ConfigDict(extra="forbid")
+
+    warned_operations: dict[str, dict[str, int | str]] = Field(default_factory=dict)
+    file_exists_operations: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
 # =============================================================================

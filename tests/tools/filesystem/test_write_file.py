@@ -157,7 +157,7 @@ class TestCreateOperation:
         with pytest.raises(FileSystemError) as exc_info:
             await tool.run(WriteFileArgs(path=str(file_path), file_text="new content"))
 
-        assert exc_info.value.code in ["FILE_NOT_VIEWED", "FILE_EXISTS"]
+        assert exc_info.value.code == "FILE_NOT_VIEWED"
         assert len(exc_info.value.suggestions) > 0
 
     async def test_create_creates_parent_directories(
@@ -402,12 +402,19 @@ class TestHashContent:
 
     def test_hash_content_matches_typescript(self) -> None:
         """Test hash function matches TypeScript implementation."""
-        # Test cases that should produce the same hash as TypeScript
-        test_cases = ["hello", "hello world", "multi\nline\ncontent"]
-        for content in test_cases:
+        # Reference hash values calculated from TypeScript implementation
+        # Hash function uses: HASH_MULTIPLIER=31, BIT_MASK_32=0x1_00_00_00_00, BASE_36
+        test_cases = {
+            "hello": "000000000000000000000000000099162322",
+            "hello world": "000000000000000000000000001794106052",
+            "multi\nline\ncontent": "000000000000000000000000001956372884",
+        }
+        for content, expected_hash in test_cases.items():
             hash_py = WriteFileTool._hash_content(content)
-            # Hash should be non-empty and consist of valid base36 characters
-            assert hash_py.isalnum()  # Base36 uses alphanumeric characters
+            assert hash_py == expected_hash, (
+                f"Hash mismatch for {content!r}: "
+                f"expected {expected_hash}, got {hash_py}"
+            )
 
 
 # =============================================================================
