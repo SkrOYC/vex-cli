@@ -31,6 +31,11 @@ from vibe.core.tools.filesystem.edit_file import (
     EditFileResult,
     EditFileTool,
 )
+from vibe.core.tools.filesystem.insert_line import (
+    InsertLineArgs,
+    InsertLineResult,
+    InsertLineTool,
+)
 from vibe.core.tools.filesystem.write_file import (
     WriteFileArgs,
     WriteFileResult,
@@ -58,6 +63,9 @@ __all__ = [
     "EditFileResult",
     "EditFileTool",
     "FileSystemError",
+    "InsertLineArgs",
+    "InsertLineResult",
+    "InsertLineTool",
     "ValidationError",
     "ViewTrackerService",
     "WriteFileArgs",
