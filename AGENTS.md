@@ -167,3 +167,89 @@ nix flake check
 2. Run linting: `uv run ruff check --fix --unsafe-fixes && uv run ruff format`
 3. Run type checking: `uv run pyright`
 4. Run tests: `uv run pytest -x` (stop on first failure)
+
+---
+
+# Implementation Notes
+
+## Nix FHS Environment for Testing
+
+Some tests require the FHS (Filesystem Hierarchy Standard) environment because dependencies like `tokenizers` (from Hugging Face) require `libstdc++.so.6` which isn't available in the default Nix shell.
+
+```bash
+# Run tests requiring FHS environment
+nix develop .#fhs --command python -m pytest tests/tools/filesystem/test_list_files.py -v
+
+# Or with uv
+nix develop .#fhs --command uv run pytest tests/tools/filesystem/test_list_files.py
+```
+
+## Tool Design Pattern: find_files vs list Modes
+
+When implementing filesystem tools that support both file discovery (find_files) and directory listing (list), design for dual modes based on input:
+
+- **With patterns** → find_files mode (glob-based file discovery)
+- **Without patterns** → list mode (directory contents)
+
+Example from `ListFilesTool`:
+```python
+if args.patterns:
+    output = await self._find_files(resolved_path, args)
+else:
+    output = await self._list(resolved_path, args)
+```
+
+## Pattern Matching: pathlib vs fnmatch
+
+- Use `Path.glob()` and `Path.rglob()` for basic patterns (`*`, `**`)
+- Use `fnmatch.fnmatch()` for advanced patterns (`?`, `[abc]`)
+- For recursive patterns with `**`, process the pattern specially if needed
+
+```python
+if "**" in pattern:
+    parts = pattern.split("**")
+    if len(parts) == self._DOUBLE_STAR_PARTS_COUNT:
+        base_pattern = parts[1].lstrip("/")
+        return fnmatch(file_name, base_pattern)
+```
+
+## Recursive vs Non-Recursive List Output
+
+The list command has different output formats based on `recursive` flag:
+
+- **`recursive=False`**: Simple list with `[DIR]`/`[FILE]` markers and file metadata
+- **`recursive=True`**: Tree structure with indentation, no markers
+
+## Test File Organization
+
+For new tool packages, create a dedicated conftest.py in the test directory to avoid importing heavy dependencies from the root conftest.py:
+
+```python
+# tests/tools/filesystem/conftest.py
+import pytest
+from pathlib import Path
+import tempfile
+
+from vibe.core.tools.filesystem.list_files import (
+    ListFilesTool, ListFilesArgs, ListFilesToolConfig, ListFilesToolState
+)
+
+@pytest.fixture
+def temp_dir() -> Path:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+# ... other fixtures
+```
+
+## Path Resolution Pattern
+
+Always resolve paths against `config.effective_workdir` and validate:
+
+```python
+def _resolve_path(self, path: str) -> Path:
+    if Path(path).is_absolute():
+        return Path(path).resolve()
+    else:
+        return (self.config.effective_workdir / path).resolve()
+```
