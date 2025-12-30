@@ -34,7 +34,6 @@ from vibe.core.tools.filesystem.edit_file import (
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -305,6 +304,21 @@ class TestStrReplaceTextNotFound:
             )
 
         assert exc_info.value.code == "TEXT_NOT_FOUND"
+
+    async def test_replace_fails_with_empty_old_str(
+        self, tool: EditFileTool, temp_dir: Path
+    ) -> None:
+        """Test replacement fails when old_str is empty string."""
+        file_path = temp_dir / "empty_old_str.txt"
+        file_path.write_text("content", encoding="utf-8")
+
+        with pytest.raises(FileSystemError) as exc_info:
+            await tool.run(
+                EditFileArgs(path=str(file_path), old_str="", new_str="replacement")
+            )
+
+        assert exc_info.value.code == "INVALID_ARGUMENT"
+        assert "cannot be an empty string" in str(exc_info.value)
 
 
 # =============================================================================

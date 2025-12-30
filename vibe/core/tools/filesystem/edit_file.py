@@ -148,10 +148,21 @@ class EditFileTool(
         # Resolve path to absolute
         resolved_path = self._resolve_path(args.path)
 
+        # Validate that old_str is not empty (split with empty separator is invalid)
+        if not args.old_str:
+            raise FileSystemError(
+                message="The 'old_str' argument cannot be an empty string.",
+                code="INVALID_ARGUMENT",
+                path=str(resolved_path),
+                suggestions=["Provide a non-empty string to search for."],
+            )
+
         # Check if file exists
         if not resolved_path.exists():
             raise FileSystemError(
-                message=f"File not found: '{resolved_path}'\n\nThe specified file doesn't exist. Use 'write_file' command to create a new file, or check if the path is correct.",
+                message=f"""File not found: '{resolved_path}'
+
+The specified file doesn't exist. Use 'write_file' command to create a new file, or check if the path is correct.""",
                 code="FILE_NOT_FOUND",
                 path=str(resolved_path),
                 suggestions=[
@@ -170,7 +181,12 @@ class EditFileTool(
         # Validate that old_str appears exactly once
         if len(parts) == 1:
             raise FileSystemError(
-                message=f"Text not found in '{resolved_path}'\n\nThe specified text '{args.old_str}' was not found in the file. Check for:\n• Typos or whitespace differences\n• Extra character escaping (content must exactly match the file)\n• Use 'read_file' command to copy the precise text including all whitespace and formatting",
+                message=f"""Text not found in '{resolved_path}'
+
+The specified text '{args.old_str}' was not found in the file. Check for:
+• Typos or whitespace differences
+• Extra character escaping (content must exactly match the file)
+• Use 'read_file' command to copy the precise text including all whitespace and formatting""",
                 code="TEXT_NOT_FOUND",
                 path=str(resolved_path),
                 suggestions=[
@@ -182,7 +198,12 @@ class EditFileTool(
 
         if len(parts) > _EXACT_MATCH_PARTS_COUNT:
             raise FileSystemError(
-                message=f"Multiple matches found: '{args.old_str}' appears {len(parts) - 1} times in '{resolved_path}'\n\nstr_replace requires exactly one occurrence. To fix:\n• Add more surrounding context to old_str to make it unique\n• Include 3+ lines before and after the target text\n• Use 'write_file' command for complex multi-location changes",
+                message=f"""Multiple matches found: '{args.old_str}' appears {len(parts) - 1} times in '{resolved_path}'
+
+str_replace requires exactly one occurrence. To fix:
+• Add more surrounding context to old_str to make it unique
+• Include 3+ lines before and after the target text
+• Use 'write_file' command for complex multi-location changes""",
                 code="MULTIPLE_MATCHES",
                 path=str(resolved_path),
                 suggestions=[
