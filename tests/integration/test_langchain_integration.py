@@ -134,7 +134,6 @@ class TestLangChainApprovalWorkflow:
     @pytest.mark.asyncio
     async def test_approval_callback_registration(self, config: VibeConfig):
         """Test that approval callback is properly registered."""
-        approval_future = asyncio.Future()
 
         async def mock_approval_callback(request):
             return {"approved": True, "feedback": None}

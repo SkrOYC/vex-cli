@@ -7,7 +7,7 @@ and meet the migration requirements from issues #38, #39, and #40.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -58,7 +58,7 @@ class TestNativeEventStreaming:
             events.append(event)
 
         # Should have received mapped events
-        assert len(events) >= 0  # Events are filtered by mapper
+        assert len(events) > 0  # Verify events were actually yielded
 
     @pytest.mark.asyncio
     async def test_auto_initialization_on_run(self, config: VibeConfig):
@@ -68,19 +68,41 @@ class TestNativeEventStreaming:
         # Agent should be None initially
         assert engine._agent is None
 
-        # Mock to avoid actual LLM calls
+        # Mock _create_model to return a properly configured mock
         with patch.object(engine, "_create_model") as mock_create_model:
             mock_model = MagicMock()
+
+            # Create mock agent that can be used in the run() call
+            async def mock_astream_events(*args, **kwargs):
+                # Return an empty async generator
+                if False:
+                    yield
+
+            mock_agent = MagicMock()
+            mock_agent.astream_events = mock_astream_events
+            mock_model.agent = mock_agent
+
+            # Make the model properly awaitable for ainvoke calls
+            mock_model.ainvoke = AsyncMock(return_value=MagicMock())
+
             mock_create_model.return_value = mock_model
 
-            # run() should auto-initialize
-            # We can't actually run without mocking more, but we can verify
-            # the initialization path exists
+            # run() should auto-initialize - verify agent becomes non-None
+            # We use a simple test: after calling run(), agent should be initialized
+            # Note: This doesn't fully execute the conversation but verifies init path
             try:
-                # This will fail without proper mocking, but that's expected
-                pass
+                # Try to run - it may fail on agent execution but initialization happens first
+                async for _ in engine.run("test message"):
+                    pass
             except Exception:
-                pass  # Expected - we're just testing the path exists
+                # Expected - agent execution isn't fully mocked
+                pass
+
+            # Verify that _create_model was called (auto-initialization)
+            mock_create_model.assert_called_once()
+
+            # Agent should now be set (initialized)
+            assert engine._agent is not None
 
 
 class TestTUIEventMapping:
