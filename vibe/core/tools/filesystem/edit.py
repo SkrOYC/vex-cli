@@ -195,13 +195,6 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
                 path=str(resolved_path),
                 suggestions=["Use 'read_file' command to examine file content first."],
             )
-            raise FileSystemError(
-                message=f"File '{resolved_path}' must be viewed before editing\n\n"
-                "Use 'read_file' command to examine file content first.",
-                code="FILE_NOT_VIEWED",
-                path=str(resolved_path),
-                suggestions=["Use 'read_file' command to examine file content first."],
-            )
 
         # Check if file was modified after the last view
         last_view_timestamp = self.config.view_tracker.get_last_view_timestamp(
