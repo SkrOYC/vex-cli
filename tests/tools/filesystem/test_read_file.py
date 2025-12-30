@@ -456,7 +456,7 @@ class TestMediaFileView:
         assert result.media is not None
         assert result.media.type == "image"
         assert result.media.mime_type == "image/png"
-        assert result.media.data == png_bytes.hex()
+        assert result.media.data == base64.b64encode(png_bytes).decode("utf-8")
         assert result.media.size == len(png_bytes)
 
     async def test_audio_file_detection(

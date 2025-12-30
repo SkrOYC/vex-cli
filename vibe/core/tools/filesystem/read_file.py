@@ -23,6 +23,7 @@ Example:
 from __future__ import annotations
 
 import base64
+import logging
 import mimetypes
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -42,6 +43,7 @@ from vibe.core.tools.filesystem.types import (
 UNSUPPORTED_LANGUAGE_PREVIEW_LINES = 100  # Lines to show for unsupported languages
 MAX_NAME_PREVIEW_LENGTH = 50  # Max characters for symbol name preview
 BYTE_SIZE_THRESHOLD = 1024  # Threshold for size formatting (bytes per KB)
+DIRECTORY_OUTLINE_BATCH_SIZE = 50  # Batch size for directory outline processing
 
 # =============================================================================
 # Argument and Result Models
@@ -140,10 +142,7 @@ class ReadFileToolConfig(BaseToolConfig):
 
     view_tracker: ViewTrackerService | None = None
 
-    class Config:
-        """Pydantic configuration for arbitrary types."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ReadFileToolState(BaseToolState):
@@ -454,7 +453,7 @@ class ReadFileTool(
                 ],
             ) from e
 
-        lines = content.split("\n")
+        lines = content.splitlines()
         line_count = len(lines)
 
         # Validate view_range if provided
@@ -587,20 +586,23 @@ class ReadFileTool(
 
             outline: list[dict] = []
 
-            # Add all symbol types
+            # Add classes
             outline.extend(
                 self._extract_symbols_by_kind(node, "class_definition", "class")
             )
-            outline.extend(
-                self._extract_symbols_by_kind(node, "function_definition", "function")
-            )
-            outline.extend(self._extract_async_functions(node))
+
+            # Add functions (both regular and async) in single pass
+            outline.extend(self._extract_functions_single_pass(node))
+
+            # Add imports
             outline.extend(
                 self._extract_symbols_by_kind(node, "import_statement", "import")
             )
             outline.extend(
                 self._extract_symbols_by_kind(node, "import_from_statement", "import")
             )
+
+            # Add variables
             outline.extend(
                 self._extract_symbols_by_kind(node, "expression_statement", "variable")
             )
@@ -610,9 +612,28 @@ class ReadFileTool(
         except ImportError:
             # ast-grep-py not available, return empty outline
             return []
-        except Exception:
-            # On any error, return empty outline
+        except Exception as e:
+            logging.warning(f"Error generating Python outline for {file_path}: {e}")
             return []
+
+    def _extract_functions_single_pass(self, node: Any) -> list[dict]:
+        """Extract functions (both regular and async) in a single pass.
+
+        Args:
+            node: The root AST node.
+
+        Returns:
+            List of function symbol information dictionaries.
+        """
+        results: list[dict] = []
+        for func_node in node.find_all(kind="function_definition"):
+            # Detect async by checking children for "async" kind
+            is_async = any(child.kind() == "async" for child in func_node.children())
+            symbol_kind = "async function" if is_async else "function"
+            symbol_info = self._extract_symbol_info(func_node, symbol_kind)
+            if symbol_info:
+                results.append(symbol_info)
+        return results
 
     def _extract_symbols_by_kind(
         self, node: Any, kind: str, symbol_kind: str
@@ -628,30 +649,10 @@ class ReadFileTool(
             List of symbol information dictionaries.
         """
         results: list[dict] = []
-        for ast_node in node.find_all(kind=kind):
-            symbol_info = self._extract_symbol_info(ast_node, symbol_kind)
+        for found_node in node.find_all(kind=kind):
+            symbol_info = self._extract_symbol_info(found_node, symbol_kind)
             if symbol_info:
                 results.append(symbol_info)
-        return results
-
-    def _extract_async_functions(self, node: Any) -> list[dict]:
-        """Extract async functions from the AST.
-
-        Args:
-            node: The root AST node.
-
-        Returns:
-            List of async function symbol information dictionaries.
-        """
-        results: list[dict] = []
-        for func_node in node.find_all(kind="function_definition"):
-            try:
-                if func_node.text().strip().startswith("async "):
-                    symbol_info = self._extract_symbol_info(func_node, "async function")
-                    if symbol_info:
-                        results.append(symbol_info)
-            except Exception:
-                pass
         return results
 
     def _extract_symbol_info(self, node: Any, kind: str) -> dict[str, int | str] | None:
@@ -840,11 +841,16 @@ class ReadFileTool(
         Returns:
             Formatted size string (e.g., "5.2 MB").
         """
-        for unit in ["B", "KB", "MB", "GB"]:
-            if size < BYTE_SIZE_THRESHOLD:
-                return f"{size:.1f} {unit}"
-            size = int(size // BYTE_SIZE_THRESHOLD)
-        return f"{size:.1f} TB"
+        if size < BYTE_SIZE_THRESHOLD:
+            return f"{size} B"
+
+        size_f = float(size)
+        for unit in ["KB", "MB", "GB"]:
+            size_f /= BYTE_SIZE_THRESHOLD
+            if size_f < BYTE_SIZE_THRESHOLD:
+                return f"{size_f:.1f} {unit}"
+
+        return f"{size_f / BYTE_SIZE_THRESHOLD:.1f} TB"
 
     # =============================================================================
     # Directory Viewing
@@ -966,7 +972,6 @@ class ReadFileTool(
             return ReadFileContentResult(output=output, line_count=len(entries))
 
         # Process Python files in batches
-        DIRECTORY_OUTLINE_BATCH_SIZE = 50
         batch_size = DIRECTORY_OUTLINE_BATCH_SIZE
 
         for i in range(0, len(python_files), batch_size):
