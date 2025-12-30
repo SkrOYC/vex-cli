@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from enum import StrEnum, auto
 import subprocess
-from typing import Any, ClassVar, assert_never
+from typing import Any, ClassVar, Iterator, assert_never, AsyncIterator
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
@@ -45,12 +45,14 @@ from vibe.cli.update_notifier import (
 from vibe.core import __version__ as CORE_VERSION
 from vibe.core.agent import Agent
 from vibe.core.engine import VibeEngine
+from vibe.core.engine.langchain_engine import VibeLangChainEngine
 from vibe.core.autocompletion.path_prompt_adapter import render_path_prompt
 from vibe.core.config import VibeConfig
 from vibe.core.config_path import HISTORY_FILE
 from vibe.core.tools.base import BaseToolConfig, ToolPermission
 from vibe.core.types import (
     ApprovalResponse,
+    BaseEvent,
     InterruptEvent,
     LLMMessage,
     ResumeSessionInfo,
@@ -150,7 +152,10 @@ class VibeApp(App):
 
         with Horizontal(id="loading-area"):
             yield Static(id="loading-area-content")
-            yield ModeIndicator(auto_approve=self.auto_approve, use_deepagents=self.config.use_deepagents)
+            yield ModeIndicator(
+                auto_approve=self.auto_approve,
+                use_deepagents=self.config.use_deepagents,
+            )
 
         yield Static(id="todo-area")
 
@@ -236,6 +241,9 @@ class VibeApp(App):
             # DeepAgents flow
             await self.agent.handle_approval(True, self._current_request_id, None)
             self._current_request_id = None
+        elif isinstance(self.agent, VibeLangChainEngine):
+            # Native LangChain 1.2.0 flow - use Command(resume=...)
+            await self.agent.handle_approval(approved=True, feedback=None)
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
@@ -253,6 +261,9 @@ class VibeApp(App):
             # DeepAgents flow
             await self.agent.handle_approval(True, self._current_request_id, None)
             self._current_request_id = None
+        elif isinstance(self.agent, VibeLangChainEngine):
+            # Native LangChain 1.2.0 flow - use Command(resume=...)
+            await self.agent.handle_approval(approved=True, feedback=None)
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
@@ -270,6 +281,9 @@ class VibeApp(App):
             # DeepAgents flow
             await self.agent.handle_approval(False, self._current_request_id, feedback)
             self._current_request_id = None
+        elif isinstance(self.agent, VibeLangChainEngine):
+            # Native LangChain 1.2.0 flow
+            await self.agent.handle_approval(approved=False, feedback=feedback)
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.NO, feedback))
@@ -499,13 +513,17 @@ class VibeApp(App):
 
         return self._agent_init_task
 
-    async def _handle_approval_decision(self, action_request: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_approval_decision(
+        self, action_request: dict[str, Any]
+    ) -> dict[str, Any]:
         """Handle approval decision from ApprovalBridge callback."""
         # Show approval dialog and get user decision
         decision = await self._switch_to_approval_app_from_action(action_request)
         return decision
 
-    async def _handle_engine_interrupt(self, interrupt_data: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_engine_interrupt(
+        self, interrupt_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Handle interrupt from VibeEngine requiring approval."""
         # Extract action request from interrupt data
         data = interrupt_data.get("data", {})
@@ -533,8 +551,13 @@ class VibeApp(App):
         return result
 
     def _get_engine_iterator(self, prompt: str) -> AsyncIterator[BaseEvent]:
-        """Get the appropriate event iterator for the current engine."""
-        if isinstance(self.agent, VibeEngine):
+        """Get the appropriate event iterator for the current engine.
+
+        Both VibeEngine (DeepAgents) and VibeLangChainEngine yield BaseEvent
+        types (VibeLangChainEngine maps native events internally via TUIEventMapper),
+        so we can return them directly.
+        """
+        if isinstance(self.agent, (VibeEngine, VibeLangChainEngine)):
             return self.agent.run(prompt)
         elif isinstance(self.agent, Agent):
             return self.agent.act(prompt)
@@ -898,7 +921,7 @@ class VibeApp(App):
             return {
                 "approved": False,
                 "always_approve": False,
-                "feedback": "Approval timeout"
+                "feedback": "Approval timeout",
             }
 
     async def _switch_to_approval_app(self, tool_name: str, tool_args: dict) -> None:

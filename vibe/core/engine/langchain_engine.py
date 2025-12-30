@@ -15,9 +15,13 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from vibe.core.config import VibeConfig
-from vibe.core.engine.langchain_middleware import ContextWarningMiddleware, PriceLimitMiddleware
+from vibe.core.engine.langchain_middleware import (
+    ContextWarningMiddleware,
+    PriceLimitMiddleware,
+)
 from vibe.core.engine.state import VibeAgentState
 from vibe.core.engine.tools import VibeToolAdapter
+from vibe.core.engine.tui_events import TUIEventMapper
 
 
 class VibeEngineStats:
@@ -72,7 +76,8 @@ class VibeLangChainEngine:
     def __init__(
         self,
         config: VibeConfig,
-        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+        | None = None,
     ) -> None:
         self.config = config
         self.approval_callback = approval_callback
@@ -80,6 +85,17 @@ class VibeLangChainEngine:
         self._checkpointer = InMemorySaver()
         self._thread_id = f"vibe-session-{uuid4()}"
         self._stats = VibeEngineStats()
+        self._tui_event_mapper: TUIEventMapper | None = None
+
+    def _get_tui_event_mapper(self) -> TUIEventMapper:
+        """Lazy initialization of TUI event mapper.
+
+        Returns:
+            TUIEventMapper instance for mapping native events to Vibe TUI events
+        """
+        if self._tui_event_mapper is None:
+            self._tui_event_mapper = TUIEventMapper(self.config)
+        return self._tui_event_mapper
 
     def _create_model(self) -> Any:
         """Create LangChain model from Vibe config."""
@@ -167,7 +183,11 @@ class VibeLangChainEngine:
         )
 
     async def run(self, user_message: str) -> AsyncGenerator[Any, None]:
-        """Run a conversation turn, yielding native LangGraph events."""
+        """Run a conversation turn, yielding mapped Vibe TUI events.
+
+        This method streams native LangGraph events through TUIEventMapper
+        to convert them to Vibe TUI event types that EventHandler expects.
+        """
         if self._agent is None:
             self.initialize()
 
@@ -180,13 +200,15 @@ class VibeLangChainEngine:
 
         messages = [("user", user_message)]
 
-        # Stream native LangGraph events - NO EventTranslator!
+        mapper = self._get_tui_event_mapper()
+
+        # Stream native LangGraph events and map to Vibe TUI events
         async for event in self._agent.astream_events(
-            {"messages": messages},
-            config=config,
-            version="v2",
+            {"messages": messages}, config=config, version="v2"
         ):
-            yield event
+            mapped_event = mapper.map_event(event)
+            if mapped_event is not None:
+                yield mapped_event
 
     async def handle_approval(
         self, approved: bool, feedback: str | None = None
@@ -199,20 +221,17 @@ class VibeLangChainEngine:
 
         if approved:
             await self._agent.ainvoke(
-                Command(resume={"approved": True, "feedback": feedback}),
-                config=config,
+                Command(resume={"approved": True, "feedback": feedback}), config=config
             )
         else:
             await self._agent.ainvoke(
-                Command(resume={"approved": False, "feedback": feedback}),
-                config=config,
+                Command(resume={"approved": False, "feedback": feedback}), config=config
             )
 
     async def resume_execution(self, decision: dict[str, Any]) -> None:
         """Resume execution after approval."""
         await self.handle_approval(
-            approved=decision.get("approved", False),
-            feedback=decision.get("feedback"),
+            approved=decision.get("approved", False), feedback=decision.get("feedback")
         )
 
     async def reject_execution(self, decision: dict[str, Any]) -> None:
@@ -233,9 +252,7 @@ class VibeLangChainEngine:
         if self._agent is None:
             return "No active conversation to compact"
 
-        state = self._agent.get_state(
-            {"configurable": {"thread_id": self._thread_id}}
-        )
+        state = self._agent.get_state({"configurable": {"thread_id": self._thread_id}})
         messages = state.values.get("messages", [])
 
         if len(messages) <= 1:
@@ -260,9 +277,9 @@ class VibeLangChainEngine:
     def get_current_messages(self) -> list:
         """Get the current conversation messages from the agent state."""
         if self._agent is not None:
-            state = self._agent.get_state(
-                {"configurable": {"thread_id": self._thread_id}}
-            )
+            state = self._agent.get_state({
+                "configurable": {"thread_id": self._thread_id}
+            })
             return state.values.get("messages", [])
         return []
 
@@ -279,9 +296,9 @@ class VibeLangChainEngine:
     def stats(self) -> VibeEngineStats:
         """Get current session statistics."""
         if self._agent is not None:
-            state = self._agent.get_state(
-                {"configurable": {"thread_id": self._thread_id}}
-            )
+            state = self._agent.get_state({
+                "configurable": {"thread_id": self._thread_id}
+            })
             messages = state.values.get("messages", [])
             context_tokens = self._get_actual_token_count(messages)
             self._stats.context_tokens = context_tokens

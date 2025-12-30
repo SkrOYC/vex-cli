@@ -12,7 +12,15 @@ if USE_LANGCHAIN:
 else:
     from vibe.core.engine.engine import VibeEngine  # Legacy DeepAgents engine
 
-from .adapters import ApprovalBridge, EventTranslator
+from .adapters import (
+    ApprovalBridge,
+)  # EventTranslator deprecated, kept for backward compat
+from .tui_events import TUIEventMapper
 from .tools import VibeToolAdapter
 
-__all__ = ["ApprovalBridge", "EventTranslator", "VibeEngine", "VibeToolAdapter"]
+__all__ = [
+    "ApprovalBridge",  # Deprecated: Use native HumanInTheLoopMiddleware
+    "TUIEventMapper",  # New: For mapping native LangGraph events
+    "VibeEngine",
+    "VibeToolAdapter",
+]
