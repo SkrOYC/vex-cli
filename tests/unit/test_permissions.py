@@ -26,10 +26,10 @@ class TestPermissions:
         tool_config = BaseToolConfig()
         tool_config.permission = ToolPermission.ASK
         tool_config.allowlist = ["*.txt"]
-        config.tools["write_file"] = tool_config
+        config.tools["create"] = tool_config
 
         # Should allow .txt files
-        result = check_allowlist_denylist("write_file", {"path": "/test.txt"}, config)
+        result = check_allowlist_denylist("create", {"path": "/test.txt"}, config)
         assert result == ToolPermission.ALWAYS
 
     def test_check_allowlist_denylist_denylist_match(self):
@@ -38,10 +38,10 @@ class TestPermissions:
         tool_config = BaseToolConfig()
         tool_config.permission = ToolPermission.ASK
         tool_config.denylist = ["*.txt"]
-        config.tools["write_file"] = tool_config
+        config.tools["create"] = tool_config
 
         # Should deny .txt files
-        result = check_allowlist_denylist("write_file", {"path": "/test.txt"}, config)
+        result = check_allowlist_denylist("create", {"path": "/test.txt"}, config)
         assert result == ToolPermission.NEVER
 
     def test_check_allowlist_denylist_no_match(self):
@@ -51,24 +51,22 @@ class TestPermissions:
         tool_config.permission = ToolPermission.ASK
         tool_config.denylist = ["*.exe"]
         tool_config.allowlist = ["*.txt"]
-        config.tools["write_file"] = tool_config
+        config.tools["create"] = tool_config
 
         # .py file doesn't match either pattern
-        result = check_allowlist_denylist("write_file", {"path": "/test.py"}, config)
+        result = check_allowlist_denylist("create", {"path": "/test.py"}, config)
         assert result == ToolPermission.ASK
 
     def test_matches_pattern_regex(self):
         """Test regex pattern matching."""
         # Regex pattern (enclosed in slashes)
-        assert matches_pattern("write_file", {"path": "/test.txt"}, "/.*\\.txt$/")
-        assert not matches_pattern("write_file", {"path": "/test.py"}, "/.*\\.txt$/")
+        assert matches_pattern("create", {"path": "/test.txt"}, "/.*\\.txt$/")
+        assert not matches_pattern("create", {"path": "/test.py"}, "/.*\\.txt$/")
 
     def test_matches_pattern_glob(self):
         """Test glob pattern matching."""
-        assert matches_pattern("write_file", {"path": "/home/user/test.txt"}, "*.txt")
-        assert not matches_pattern(
-            "write_file", {"path": "/home/user/test.py"}, "*.txt"
-        )
+        assert matches_pattern("create", {"path": "/home/user/test.txt"}, "*.txt")
+        assert not matches_pattern("create", {"path": "/home/user/test.py"}, "*.txt")
 
     def test_matches_pattern_simple_string(self):
         """Test simple string matching."""
@@ -81,7 +79,7 @@ class TestPermissions:
 
         write_config = BaseToolConfig()
         write_config.permission = ToolPermission.ASK
-        config.tools["write_file"] = write_config
+        config.tools["create"] = write_config
 
         read_config = BaseToolConfig()
         read_config.permission = ToolPermission.ALWAYS
@@ -89,9 +87,9 @@ class TestPermissions:
 
         result = build_interrupt_config(config)
 
-        # write_file should be interrupted (ASK)
-        assert "write_file" in result
-        assert result["write_file"] is True
+        # create should be interrupted (ASK)
+        assert "create" in result
+        assert result["create"] is True
 
         # read_file should not be interrupted (ALWAYS)
         assert "read_file" not in result
@@ -116,25 +114,17 @@ class TestPermissions:
         """Test pattern matching with complex file paths."""
         # Paths with special characters
         assert matches_pattern(
-            "write_file", {"path": "/home/user/file with spaces.txt"}, "*.txt"
+            "create", {"path": "/home/user/file with spaces.txt"}, "*.txt"
         )
-        assert matches_pattern(
-            "write_file", {"path": "/home/user/file[1].txt"}, "*.txt"
-        )
-        assert matches_pattern(
-            "write_file", {"path": "/home/user/file(1).txt"}, "*.txt"
-        )
+        assert matches_pattern("create", {"path": "/home/user/file[1].txt"}, "*.txt")
+        assert matches_pattern("create", {"path": "/home/user/file(1).txt"}, "*.txt")
 
         # Unicode characters
-        assert matches_pattern("write_file", {"path": "/home/user/文件.txt"}, "*.txt")
+        assert matches_pattern("create", {"path": "/home/user/文件.txt"}, "*.txt")
 
         # Absolute vs relative paths
-        assert matches_pattern(
-            "write_file", {"path": "relative/path/file.txt"}, "*.txt"
-        )
-        assert matches_pattern(
-            "write_file", {"path": "./relative/path/file.txt"}, "*.txt"
-        )
+        assert matches_pattern("create", {"path": "relative/path/file.txt"}, "*.txt")
+        assert matches_pattern("create", {"path": "./relative/path/file.txt"}, "*.txt")
 
     def test_matches_pattern_regex_edge_cases(self):
         """Test regex pattern matching edge cases."""
@@ -156,30 +146,26 @@ class TestPermissions:
         tool_config.permission = ToolPermission.ASK
         tool_config.allowlist = ["*.txt", "*.md"]
         tool_config.denylist = ["*secret*"]
-        config.tools["write_file"] = tool_config
+        config.tools["create"] = tool_config
 
         # Should deny secret files even if they match allowlist
         result = check_allowlist_denylist(
-            "write_file", {"path": "/docs/secret.txt"}, config
+            "create", {"path": "/docs/secret.txt"}, config
         )
         assert result == ToolPermission.NEVER
 
         # Should allow non-secret txt files
         result = check_allowlist_denylist(
-            "write_file", {"path": "/docs/public.txt"}, config
+            "create", {"path": "/docs/public.txt"}, config
         )
         assert result == ToolPermission.ALWAYS
 
         # Should deny secret md files
-        result = check_allowlist_denylist(
-            "write_file", {"path": "/docs/secret.md"}, config
-        )
+        result = check_allowlist_denylist("create", {"path": "/docs/secret.md"}, config)
         assert result == ToolPermission.NEVER
 
         # Should ask for files that don't match any pattern
-        result = check_allowlist_denylist(
-            "write_file", {"path": "/docs/file.py"}, config
-        )
+        result = check_allowlist_denylist("create", {"path": "/docs/file.py"}, config)
         assert result == ToolPermission.ASK
 
     def test_build_interrupt_config_edge_cases(self):

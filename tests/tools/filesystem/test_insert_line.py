@@ -34,10 +34,6 @@ from vibe.core.tools.filesystem.insert_line import (
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
 
-# Mark all async tests
-pytestmark = pytest.mark.asyncio
-
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -179,6 +175,8 @@ class TestInsertLineResult:
 
 class TestInsertSuccess:
     """Tests for successful insertion operations."""
+
+    pytestmark = pytest.mark.asyncio
 
     async def test_insert_at_beginning(
         self, tool: InsertLineTool, temp_dir: Path
@@ -332,6 +330,8 @@ class TestInsertSuccess:
 class TestLineOutOfBounds:
     """Tests for line out of bounds error handling."""
 
+    pytestmark = pytest.mark.asyncio
+
     async def test_empty_file_line_greater_than_1_raises_error(
         self, tool: InsertLineTool, temp_dir: Path
     ) -> None:
@@ -411,6 +411,8 @@ class TestLineOutOfBounds:
 class TestFileNotFound:
     """Tests for file not found error handling."""
 
+    pytestmark = pytest.mark.asyncio
+
     async def test_insert_on_nonexistent_file_raises_error(
         self, tool: InsertLineTool, temp_dir: Path
     ) -> None:
@@ -425,10 +427,10 @@ class TestFileNotFound:
         assert exc_info.value.code == "FILE_NOT_FOUND"
         assert "not found" in str(exc_info.value)
 
-    async def test_error_message_suggests_write_file(
+    async def test_error_message_suggests_create(
         self, tool: InsertLineTool, temp_dir: Path
     ) -> None:
-        """Test error message suggests using write_file for new files."""
+        """Test error message suggests using create for new files."""
         file_path = temp_dir / "missing.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
@@ -437,11 +439,8 @@ class TestFileNotFound:
             )
 
         error_str = str(exc_info.value).lower()
-        # Check that suggestions include write_file or create
-        assert (
-            any(word in error_str for word in ["write_file", "write", "create"])
-            or len(exc_info.value.suggestions) > 0
-        )
+        # Check that suggestions include create
+        assert "create" in error_str or len(exc_info.value.suggestions) > 0
 
 
 # =============================================================================
@@ -451,6 +450,8 @@ class TestFileNotFound:
 
 class TestPathResolution:
     """Tests for path resolution functionality."""
+
+    pytestmark = pytest.mark.asyncio
 
     async def test_relative_path_resolved_against_workdir(
         self, tool: InsertLineTool, temp_dir: Path
@@ -495,6 +496,8 @@ class TestPathResolution:
 
 class TestUTF8Encoding:
     """Tests for UTF-8 encoding handling."""
+
+    pytestmark = pytest.mark.asyncio
 
     async def test_utf8_handles_special_characters(
         self, tool: InsertLineTool, temp_dir: Path
@@ -545,6 +548,8 @@ class TestToolConfiguration:
 class TestErrorMessages:
     """Tests for error message quality."""
 
+    pytestmark = pytest.mark.asyncio
+
     async def test_all_errors_include_helpful_suggestions(
         self, tool: InsertLineTool, temp_dir: Path
     ) -> None:
@@ -571,9 +576,9 @@ class TestErrorMessages:
             )
 
         error_msg = str(exc_info.value)
-        # Should mention file not found and suggest write_file
+        # Should mention file not found and suggest create
         assert "not found" in error_msg.lower() or "notfound" in error_msg.lower()
-        assert "write_file" in error_msg or "create" in error_msg.lower()
+        assert "create" in error_msg.lower()
 
     async def test_line_out_of_bounds_error_format(
         self, tool: InsertLineTool, temp_dir: Path
@@ -599,6 +604,8 @@ class TestErrorMessages:
 
 class TestEditHistory:
     """Tests for edit history functionality."""
+
+    pytestmark = pytest.mark.asyncio
 
     async def test_multiple_inserts_save_to_history(
         self, tool: InsertLineTool, temp_dir: Path
@@ -659,6 +666,8 @@ class TestEditHistory:
 
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
+
+    pytestmark = pytest.mark.asyncio
 
     async def test_insert_multiline_content(
         self, tool: InsertLineTool, temp_dir: Path

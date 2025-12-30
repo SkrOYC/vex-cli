@@ -74,10 +74,7 @@ class InsertLineToolConfig(BaseToolConfig):
 
     view_tracker: ViewTrackerService | None = None
 
-    class Config:
-        """Pydantic configuration for arbitrary types."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class InsertLineToolState(BaseToolState):
@@ -149,11 +146,11 @@ class InsertLineTool(
             raise FileSystemError(
                 message=f"""File not found: '{resolved_path}'
 
-The specified file doesn't exist. Use 'write_file' command to create a new file, or check if the path is correct.""",
+The specified file doesn't exist. Use 'create' command to create a new file, or check if the path is correct.""",
                 code="FILE_NOT_FOUND",
                 path=str(resolved_path),
                 suggestions=[
-                    "Use 'write_file' command to create a new file",
+                    "Use 'create' command to create a new file",
                     "Check the file path for typos or errors",
                     "Use 'list' command to verify the file exists",
                 ],
@@ -175,7 +172,7 @@ The specified file doesn't exist. Use 'write_file' command to create a new file,
                     suggestions=[
                         "For empty files, you can only insert at line 1",
                         "Use insertLine: 1 to add content to an empty file",
-                        "Use 'write_file' command to add content to an empty file",
+                        "Use 'create' command to add content to an empty file",
                     ],
                 )
         else:

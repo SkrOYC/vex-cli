@@ -169,7 +169,7 @@ def build_interrupt_config(config: VibeConfig) -> dict[str, Any]:
                 pass
 
     # Add defaults for dangerous tools
-    dangerous_tools = ["write_file", "edit_file", "bash", "execute"]
+    dangerous_tools = ["create", "edit", "edit_file", "bash", "execute"]
     for tool in dangerous_tools:
         if tool not in interrupt_on:
             interrupt_on[tool] = True

@@ -78,10 +78,7 @@ class EditFileToolConfig(BaseToolConfig):
 
     view_tracker: ViewTrackerService | None = None
 
-    class Config:
-        """Pydantic configuration for arbitrary types."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class EditFileToolState(BaseToolState):
@@ -162,11 +159,11 @@ class EditFileTool(
             raise FileSystemError(
                 message=f"""File not found: '{resolved_path}'
 
-The specified file doesn't exist. Use 'write_file' command to create a new file, or check if the path is correct.""",
+The specified file doesn't exist. Use 'create' command to create a new file, or check if the path is correct.""",
                 code="FILE_NOT_FOUND",
                 path=str(resolved_path),
                 suggestions=[
-                    "Use 'write_file' command to create a new file",
+                    "Use 'create' command to create a new file",
                     "Check the file path for typos or errors",
                     "Use 'list' command to verify the file exists",
                 ],
@@ -202,14 +199,14 @@ The specified text '{args.old_str}' was not found in the file. Check for:
 
 str_replace requires exactly one occurrence. To fix:
 • Add more surrounding context to old_str to make it unique
-• Include 3+ lines before and after the target text
-• Use 'write_file' command for complex multi-location changes""",
+• Include 3+ lines before and after target text
+• Use 'create' command to create a new file or 'edit' to replace entire content""",
                 code="MULTIPLE_MATCHES",
                 path=str(resolved_path),
                 suggestions=[
                     "Add more surrounding context to old_str to make it unique",
-                    "Include 3+ lines before and after the target text",
-                    "Use 'write_file' command for complex multi-location changes",
+                    "Include 3+ lines before and after target text",
+                    "Use 'create' command to create a new file or 'edit' to replace entire content",
                 ],
             )
 

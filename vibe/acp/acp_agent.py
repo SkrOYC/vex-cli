@@ -200,7 +200,8 @@ class VibeAcpAgent(AcpAgent):
             if not fs.readTextFile:
                 disabled.append("read_file")
             if not fs.writeTextFile:
-                disabled.append("write_file")
+                disabled.append("create")
+                disabled.append("edit")
                 disabled.append("search_replace")
 
         return disabled

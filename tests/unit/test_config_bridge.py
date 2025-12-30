@@ -28,7 +28,7 @@ class TestDeepAgentsConfigBridge:
         """Test that tools with 'ask' permission are properly mapped to interrupts."""
         config = VibeConfig(
             tools={
-                "write_file": BaseToolConfig(permission=ToolPermission.ASK),
+                "create": BaseToolConfig(permission=ToolPermission.ASK),
                 "bash": BaseToolConfig(permission=ToolPermission.ASK),
                 "read_file": BaseToolConfig(permission=ToolPermission.ALWAYS),
                 "search": BaseToolConfig(permission=ToolPermission.NEVER),
@@ -38,8 +38,8 @@ class TestDeepAgentsConfigBridge:
         interrupt_config = DeepAgentsConfig.create_interrupt_config(config)
 
         # Only tools with 'ask' permission should be in interrupt_config
-        assert "write_file" in interrupt_config
-        assert interrupt_config["write_file"] is True
+        assert "create" in interrupt_config
+        assert interrupt_config["create"] is True
         assert "bash" in interrupt_config
         assert interrupt_config["bash"] is True
 

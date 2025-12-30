@@ -26,7 +26,7 @@ class TestApprovalFlow:
         engine = VibeEngine(config=config, approval_callback=approval_bridge)
         engine.initialize()
 
-        assert engine.approval_bridge == approval_bridge
+        assert engine.approval_callback == approval_bridge
         assert engine._agent is not None
 
     @pytest.mark.asyncio
@@ -40,7 +40,7 @@ class TestApprovalFlow:
         # Add tool configs
         write_config = BaseToolConfig()
         write_config.permission = ToolPermission.ASK
-        config.tools["write_file"] = write_config
+        config.tools["create"] = write_config
 
         read_config = BaseToolConfig()
         read_config.permission = ToolPermission.ALWAYS
@@ -49,8 +49,8 @@ class TestApprovalFlow:
         engine = VibeEngine(config=config)
         interrupt_config = engine._build_interrupt_config()
 
-        # write_file should be interrupted
-        assert "write_file" in interrupt_config
+        # create should be interrupted
+        assert "create" in interrupt_config
         # read_file should not
         assert "read_file" not in interrupt_config
         # Dangerous tools should be included
@@ -287,7 +287,7 @@ class TestApprovalFlow:
         write_config = BaseToolConfig()
         write_config.permission = ToolPermission.ASK
         write_config.allowlist = ["*.txt"]
-        config.tools["write_file"] = write_config
+        config.tools["create"] = write_config
 
         bridge = ApprovalBridge(config=config)
 
@@ -295,9 +295,9 @@ class TestApprovalFlow:
         interrupt_allow = {
             "data": {
                 "action_request": {
-                    "name": "write_file",
-                    "args": {"path": "test.txt", "content": "hello"},
-                    "description": "Write to text file",
+                    "name": "create",
+                    "args": {"path": "test.txt", "file_text": "hello"},
+                    "description": "Create text file",
                 }
             }
         }
@@ -311,9 +311,9 @@ class TestApprovalFlow:
         interrupt_deny = {
             "data": {
                 "action_request": {
-                    "name": "write_file",
-                    "args": {"path": "malware.exe", "content": "bad"},
-                    "description": "Write to exe file",
+                    "name": "create",
+                    "args": {"path": "malware.exe", "file_text": "bad"},
+                    "description": "Create exe file",
                 }
             }
         }
@@ -497,7 +497,7 @@ class TestLangChainNativeHITL:
 
         write_config = BaseToolConfig()
         write_config.permission = ToolPermission.ASK
-        config.tools["write_file"] = write_config
+        config.tools["create"] = write_config
 
         read_config = BaseToolConfig()
         read_config.permission = ToolPermission.ALWAYS
@@ -506,8 +506,8 @@ class TestLangChainNativeHITL:
         # Build interrupt config
         interrupt_on = build_interrupt_config(config)
 
-        # write_file should require approval
-        assert "write_file" in interrupt_on
+        # create should require approval
+        assert "create" in interrupt_on
         # read_file should auto-approve (not in interrupt_on)
         assert "read_file" not in interrupt_on
 
@@ -522,14 +522,14 @@ class TestLangChainNativeHITL:
             None,
         )
         assert hitl is not None
-        # The middleware may transform the config, but write_file should still require approval
-        assert "write_file" in hitl.interrupt_on
+        # The middleware may transform the config, but create should still require approval
+        assert "create" in hitl.interrupt_on
 
     @pytest.mark.asyncio
     async def test_langchain_engine_with_no_approvals_configured(self):
         """Test middleware stack when no custom tools require approval.
 
-        Note: Even with no custom approvals, dangerous tools (bash, write_file, etc.)
+        Note: Even with no custom approvals, dangerous tools (bash, create, edit, etc.)
         are always added to interrupt_on by build_interrupt_config() for security.
         """
         from langchain.agents.middleware import HumanInTheLoopMiddleware

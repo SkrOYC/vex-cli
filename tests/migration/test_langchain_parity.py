@@ -249,7 +249,8 @@ class TestLangChainParity:
         assert "test_always_tool" not in interrupt_on
         # Dangerous tools should always be in interrupt_on
         assert "bash" in interrupt_on
-        assert "write_file" in interrupt_on
+        assert "create" in interrupt_on
+        assert "edit" in interrupt_on
 
 
 class TestLangChainTokenAccuracy:

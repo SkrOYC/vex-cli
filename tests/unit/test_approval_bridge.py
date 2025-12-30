@@ -91,16 +91,16 @@ class TestApprovalBridge:
     async def test_extract_action_request_fallback(self, approval_bridge):
         """Test fallback action request extraction."""
         interrupt = {
-            "name": "write_file",
-            "args": {"path": "/file.txt"},
-            "description": "Write file",
+            "name": "create",
+            "args": {"path": "/file.txt", "file_text": "content"},
+            "description": "Create file",
         }
 
         result = approval_bridge._extract_action_request(interrupt)
         assert result == {
-            "name": "write_file",
-            "args": {"path": "/file.txt"},
-            "description": "Write file",
+            "name": "create",
+            "args": {"path": "/file.txt", "file_text": "content"},
+            "description": "Create file",
         }
 
     @pytest.mark.asyncio
@@ -148,9 +148,9 @@ class TestApprovalBridge:
         interrupt1 = {
             "data": {
                 "action_request": {
-                    "name": "write_file",
-                    "args": {"path": "/file1.txt"},
-                    "description": "Write file 1",
+                    "name": "create",
+                    "args": {"path": "/file1.txt", "file_text": "content"},
+                    "description": "Create file 1",
                 }
             }
         }

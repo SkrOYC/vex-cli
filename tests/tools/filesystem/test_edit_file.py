@@ -366,7 +366,7 @@ class TestStrReplaceMultipleMatches:
         suggestions_text = " ".join(exc_info.value.suggestions).lower()
         assert any(
             word in suggestions_text
-            for word in ["context", "surrounding", "write_file"]
+            for word in ["context", "surrounding", "create", "edit"]
         )
 
 
@@ -409,8 +409,7 @@ class TestFileNotFound:
         assert len(exc_info.value.suggestions) > 0
         suggestions_text = " ".join(exc_info.value.suggestions).lower()
         assert any(
-            word in suggestions_text
-            for word in ["write_file", "create", "check", "path"]
+            word in suggestions_text for word in ["create", "edit", "check", "path"]
         )
 
 

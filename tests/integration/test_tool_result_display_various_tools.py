@@ -93,9 +93,9 @@ def test_tool_result_display_with_error_result(none_tool_adapter):
 def test_tool_result_display_with_skipped_result(none_tool_adapter):
     """Test tool result display with skipped tool."""
     event = ToolResultEvent(
-        tool_name="write_file",
+        tool_name="create",
         tool_class=None,
-        tool_call_id="write_123",
+        tool_call_id="create_123",
         skipped=True,
         skip_reason="User denied permission",
     )
