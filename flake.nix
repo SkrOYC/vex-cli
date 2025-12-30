@@ -158,6 +158,37 @@
               export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
             '';
           };
+
+        # FHS environment for traditional Python virtualenv/pip usage
+        # Note: This should be used directly via `nix develop .#fhs`, not with direnv
+        fhs = pkgs.buildFHSEnv {
+          name = "vex-cli-fhs-env";
+
+          targetPkgs = pkgs':
+            with pkgs'; [
+              # Python interpreter with venv module
+              python312
+
+              # Development tools
+              uv
+              git
+
+              # Common build dependencies for Python packages
+              stdenv.cc.cc.lib
+              zlib
+              openssl
+            ];
+
+          runScript = "bash";
+
+          profile = ''
+            # Set up environment for traditional venv/pip usage
+            unset SOURCE_DATE_EPOCH
+
+            # Ensure library paths are correct
+            export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
+          '';
+        };
       };
     });
 }
