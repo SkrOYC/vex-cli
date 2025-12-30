@@ -26,6 +26,11 @@ from vibe.core.tools.filesystem.types import (
     FileSystemError,
     ValidationError,
 )
+from vibe.core.tools.filesystem.edit_file import (
+    EditFileArgs,
+    EditFileResult,
+    EditFileTool,
+)
 from vibe.core.tools.filesystem.write_file import (
     WriteFileArgs,
     WriteFileResult,
@@ -49,6 +54,9 @@ __all__ = [
     "MISTAKEN_EDIT_TIMEOUT_MS",
     "OUTPUT_LIMIT",
     "STR_REPLACE_LENGTH_RATIO_THRESHOLD",
+    "EditFileArgs",
+    "EditFileResult",
+    "EditFileTool",
     "FileSystemError",
     "ValidationError",
     "ViewTrackerService",
