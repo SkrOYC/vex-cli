@@ -2,15 +2,28 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import pytest
 import tomli_w
 
-from vibe.core import config_path
-from vibe.core.config import VibeConfig, ModelConfig, ProviderConfig, Backend
-from vibe.core.engine import VibeEngine
-from vibe.core.engine.adapters import EventTranslator
+# Try to import heavy dependencies, but fail gracefully if they're not available
+# This allows filesystem tests to run without needing all ML dependencies
+try:
+    from vibe.core import config_path
+    from vibe.core.config import VibeConfig, ModelConfig, ProviderConfig, Backend
+    from vibe.core.engine import VibeEngine
+    from vibe.core.engine.adapters import EventTranslator
+
+    _HEAVY_IMPORTS_AVAILABLE = True
+except ImportError as e:
+    _HEAVY_IMPORTS_AVAILABLE = False
+    _IMPORT_ERROR = e
+
+if TYPE_CHECKING:
+    from vibe.core.config import VibeConfig
+    from vibe.core.engine import VibeEngine
+    from vibe.core.engine.adapters import EventTranslator
 
 
 def get_base_config() -> dict[str, Any]:
@@ -69,15 +82,13 @@ def deepagents_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
     """Create test configuration for DeepAgents."""
     # Mock the API key to avoid MissingAPIKeyError
     monkeypatch.setenv("OPENAI_API_KEY", "mock-test-key")
-    
+
     return VibeConfig(
         active_model="test-model",  # Must match the alias
         use_deepagents=True,
         models=[
             ModelConfig(
-                name="gpt-4o-mini",
-                provider="openai-compatible",
-                alias="test-model"
+                name="gpt-4o-mini", provider="openai-compatible", alias="test-model"
             )
         ],
         providers=[
@@ -87,7 +98,7 @@ def deepagents_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
                 api_key_env_var="OPENAI_API_KEY",
                 backend=Backend.GENERIC,
             )
-        ]
+        ],
     )
 
 
@@ -96,15 +107,13 @@ def langchain_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
     """Create test configuration for LangChain 1.2.0 engine."""
     # Mock the API key to avoid MissingAPIKeyError
     monkeypatch.setenv("OPENAI_API_KEY", "mock-test-key")
-    
+
     return VibeConfig(
         active_model="test-model",  # Must match the alias
         use_langchain=True,
         models=[
             ModelConfig(
-                name="gpt-4o-mini",
-                provider="openai-compatible",
-                alias="test-model"
+                name="gpt-4o-mini", provider="openai-compatible", alias="test-model"
             )
         ],
         providers=[
@@ -114,7 +123,7 @@ def langchain_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
                 api_key_env_var="OPENAI_API_KEY",
                 backend=Backend.GENERIC,
             )
-        ]
+        ],
     )
 
 

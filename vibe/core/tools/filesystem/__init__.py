@@ -36,6 +36,13 @@ from vibe.core.tools.filesystem.insert_line import (
     InsertLineResult,
     InsertLineTool,
 )
+from vibe.core.tools.filesystem.list_files import (
+    ListFilesArgs,
+    ListFilesResult,
+    ListFilesTool,
+    ListFilesToolConfig,
+    ListFilesToolState,
+)
 from vibe.core.tools.filesystem.read_file import (
     ReadFileArgs,
     ReadFileContentResult,
@@ -75,6 +82,11 @@ __all__ = [
     "InsertLineArgs",
     "InsertLineResult",
     "InsertLineTool",
+    "ListFilesArgs",
+    "ListFilesResult",
+    "ListFilesTool",
+    "ListFilesToolConfig",
+    "ListFilesToolState",
     "ReadFileArgs",
     "ReadFileContentResult",
     "ReadFileMediaResult",
