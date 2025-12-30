@@ -1,7 +1,14 @@
 """Event and approval adapters for DeepAgents integration.
 
-TODO: Remove ApprovalBridge after full migration to native HITL (see issue #39).
-The native HumanInTheLoopMiddleware replaces this adapter for LangChain 1.2.0+.
+DEPRECATED: This module is deprecated and will be removed after full migration
+to native LangChain 1.2.0.
+
+For VibeLangChainEngine (LangChain 1.2.0+), use:
+- TUIEventMapper from vibe.core.engine.tui_events for event mapping
+- Native HumanInTheLoopMiddleware for approval flow
+
+EventTranslator and ApprovalBridge remain here for backward compatibility
+with VibeEngine (DeepAgents) only.
 """
 
 from __future__ import annotations
@@ -38,9 +45,21 @@ class GenericResult(BaseModel):
 
 
 class EventTranslator:
-    """Translate LangGraph events to Vibe TUI events."""
+    """Translate LangGraph events to Vibe TUI events.
+
+    DEPRECATED: Use TUIEventMapper from vibe.core.engine.tui_events instead.
+    This class is only kept for backward compatibility with VibeEngine (DeepAgents).
+    """
 
     def __init__(self, config: VibeConfig):
+        import warnings
+
+        warnings.warn(
+            "EventTranslator is deprecated. Use TUIEventMapper from "
+            "vibe.core.engine.tui_events instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.config = config
         self.tool_manager = ToolManager(config)
 
@@ -128,20 +147,36 @@ class EventTranslator:
 
 
 class ApprovalBridge:
-    """Bridge LangGraph interrupts to Vibe TUI approval flow."""
+    """Bridge LangGraph interrupts to Vibe TUI approval flow.
+
+    DEPRECATED: Use native HumanInTheLoopMiddleware with Command(resume=...)
+    for approval flow in VibeLangChainEngine.
+    This class is only kept for backward compatibility with VibeEngine (DeepAgents).
+    """
 
     def __init__(
-        self, 
+        self,
         config: VibeConfig,
-        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None
+        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+        | None = None,
     ) -> None:
+        import warnings
+
+        warnings.warn(
+            "ApprovalBridge is deprecated. Use native HumanInTheLoopMiddleware "
+            "for approval flow in VibeLangChainEngine.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.config = config
         self.approval_callback = approval_callback
         self._pending_approvals: dict[str, asyncio.Future[dict[str, Any]]] = {}
         # Track session-wide auto-approvals from "Always" option
         self._session_auto_approve: set[str] = set()
 
-    def _format_action_request_for_ui(self, action_request: dict[str, Any]) -> dict[str, Any]:
+    def _format_action_request_for_ui(
+        self, action_request: dict[str, Any]
+    ) -> dict[str, Any]:
         """Format action request for TUI approval dialog."""
         # Ensure all required fields are present with defaults
         return {
@@ -162,11 +197,16 @@ class ApprovalBridge:
         tool_args = action_request.get("args", {})
 
         # Check pattern-based permissions first
-        effective_permission = get_effective_permission(tool_name, tool_args, self.config)
-        
+        effective_permission = get_effective_permission(
+            tool_name, tool_args, self.config
+        )
+
         match effective_permission:
             case ToolPermission.ALWAYS:
-                return {"approved": True, "feedback": "Auto-approved by allowlist pattern"}
+                return {
+                    "approved": True,
+                    "feedback": "Auto-approved by allowlist pattern",
+                }
             case ToolPermission.NEVER:
                 return {"approved": False, "feedback": "Blocked by denylist pattern"}
             case ToolPermission.ASK:
@@ -175,7 +215,10 @@ class ApprovalBridge:
 
         # Check if tool is session-wide auto-approved
         if tool_name in self._session_auto_approve:
-            return {"approved": True, "feedback": f"Auto-approved for session (tool: {tool_name})"}
+            return {
+                "approved": True,
+                "feedback": f"Auto-approved for session (tool: {tool_name})",
+            }
 
         # Create unique request ID
         request_id = str(uuid4())
@@ -188,22 +231,24 @@ class ApprovalBridge:
             if self.approval_callback:
                 # Format action request for TUI
                 ui_request = self._format_action_request_for_ui(action_request)
-                
+
                 # Wait for decision with timeout (60 seconds for user interaction)
                 decision = await asyncio.wait_for(
-                    self.approval_callback(ui_request), 
-                    timeout=60.0
+                    self.approval_callback(ui_request), timeout=60.0
                 )
-                
+
                 # Handle "Always" option - add to session auto-approve
                 if decision.get("approved") and decision.get("always_approve", False):
                     self._session_auto_approve.add(tool_name)
-                
+
                 return decision
             else:
                 # Auto-approve if no callback provided (programmatic mode)
-                return {"approved": True, "feedback": "Auto-approved (no approval callback)"}
-                
+                return {
+                    "approved": True,
+                    "feedback": "Auto-approved (no approval callback)",
+                }
+
         except asyncio.TimeoutError:
             # Auto-reject on timeout
             if request_id in self._pending_approvals:
