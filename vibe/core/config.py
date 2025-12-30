@@ -335,6 +335,7 @@ class VibeConfig(BaseSettings):
     )
 
     use_deepagents: bool = Field(default=False)
+    use_langchain: bool = Field(default=False)
     enable_subagents: bool = Field(default=True)
     enable_planning: bool = Field(default=True)
     max_recursion_depth: int = Field(default=1000)

@@ -30,6 +30,8 @@ dependencies = [
     "agent-client-protocol==0.6.3",
     "aiofiles>=24.1.0",
     "httpx>=0.28.1",
+    "langchain>=1.2.0",
+    "langgraph>=1.0.2,<1.1.0",
     "mcp>=1.14.0",
     "mistralai==1.9.11",
     "pexpect>=4.9.0",
