@@ -110,18 +110,20 @@ class TestViewTrackerService:
         assert tracker.has_been_viewed("/any/path") is False
 
     def test_record_view_updates_existing_timestamp(
-        self, tracker: ViewTrackerService
+        self, tracker: ViewTrackerService, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test record_view updates the timestamp if file was already viewed."""
+        current_time = 1000000000.0
+
+        monkeypatch.setattr(time, "time", lambda: current_time)
         tracker.record_view("/project/src/main.py")
         first_timestamp = tracker.get_last_view_timestamp("/project/src/main.py")
 
-        # Small delay to ensure different timestamp
-        time.sleep(0.01)
+        # Advance time
+        current_time += 10
         tracker.record_view("/project/src/main.py")
         second_timestamp = tracker.get_last_view_timestamp("/project/src/main.py")
 
-        # Both timestamps should be not None since we just recorded views
         assert first_timestamp is not None
         assert second_timestamp is not None
         assert second_timestamp > first_timestamp
