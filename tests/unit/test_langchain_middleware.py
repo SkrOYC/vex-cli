@@ -1,4 +1,4 @@
-"""Unit tests for middleware components."""
+"""Unit tests for langchain_middleware.py - LangChain 1.2.0 native middleware."""
 
 from __future__ import annotations
 
@@ -6,13 +6,12 @@ from typing import cast
 
 import pytest
 
+from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
 
-from vibe.core.config import VibeConfig
-from vibe.core.engine.middleware import (
+from vibe.core.engine.langchain_middleware import (
     ContextWarningMiddleware,
     PriceLimitMiddleware,
-    build_middleware_stack,
 )
 
 
@@ -22,9 +21,11 @@ class TestContextWarningMiddleware:
     def test_no_warning_when_below_threshold(self):
         """Test that no warning is injected when below threshold."""
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
-        state = {"messages": ["short message"] * 10}  # ~40 tokens, below 500
+        
+        # Create a mock state with messages but low token count
+        state = {"messages": ["short message"] * 10}  # ~40 tokens, below 500 threshold
 
-        result = middleware.before_model(state, cast(Runtime, cast(Runtime, None)))
+        result = middleware.before_model(state, cast(Runtime, None))
         assert result is None
 
     def test_warning_when_above_threshold(self):
@@ -54,13 +55,80 @@ class TestContextWarningMiddleware:
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
         state = {"messages": ["long message content"] * 100}
 
-        # First call should warn
+        # First call should warn (will fall back to estimation)
         result1 = middleware.before_model(state, cast(Runtime, None))
         assert result1 is not None
 
-        # Second call should not warn
+        # Second call should not warn (already warned)
         result2 = middleware.before_model(state, cast(Runtime, None))
         assert result2 is None
+
+    def test_no_warning_when_max_context_none(self):
+        """Test that no warning is injected when max_context is None."""
+        middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=None)
+        state = {"messages": ["long message content"] * 1000}
+
+        result = middleware.before_model(state, cast(Runtime, None))
+        assert result is None
+
+    def test_uses_usage_metadata(self):
+        """Test that usage_metadata is preferred over estimation."""
+        from langchain_core.messages import AIMessage
+
+        middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
+
+        # Create a message with usage metadata showing 900 tokens
+        ai_message = AIMessage(
+            content="short",
+            usage_metadata={
+                "input_tokens": 450,
+                "output_tokens": 450,
+                "total_tokens": 900,
+            },
+        )
+        # Add lots of content that would estimate high, but usage_metadata should be used
+        state = {"messages": ["very long content " * 1000] * 100 + [ai_message]}
+
+        result = middleware.before_model(state, cast(Runtime, None))
+        assert result is not None
+        assert "warning" in result
+        assert "90%" in result["warning"]  # 900/1000 = 90%
+
+    def test_falls_back_to_estimation(self):
+        """Test that estimation is used when usage_metadata is not available."""
+        middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
+
+        # Create messages without usage_metadata
+        # "short message" is 13 chars, * 2000 = 26k chars, /4 = 6500 tokens
+        state = {"messages": ["short message"] * 2000}
+
+        result = middleware.before_model(state, cast(Runtime, None))
+        assert result is not None
+        assert "warning" in result
+        assert "650%" in result["warning"]  # 6500/1000 = 650%
+
+    def test_warning_message_format(self):
+        """Test warning message is properly formatted."""
+        from langchain_core.messages import AIMessage
+
+        middleware = ContextWarningMiddleware(threshold_percent=0.75, max_context=10000)
+
+        ai_message = AIMessage(
+            content="response",
+            usage_metadata={
+                "input_tokens": 4000,
+                "output_tokens": 4000,
+                "total_tokens": 8000,
+            },
+        )
+        state = {"messages": [ai_message]}
+
+        result = middleware.before_model(state, cast(Runtime, None))
+        assert result is not None
+        warning = result["warning"]
+        assert "80%" in warning  # 8000/10000 = 80%
+        assert "8,000" in warning
+        assert "10,000" in warning
 
 
 class TestPriceLimitMiddleware:
@@ -95,9 +163,7 @@ class TestPriceLimitMiddleware:
         from langchain_core.messages import AIMessage
 
         pricing = {"test-model": (0.001, 0.002)}  # $1.00 per 1k tokens
-        middleware = PriceLimitMiddleware(
-            max_price=1.0, model_name="test-model", pricing=pricing
-        )
+        middleware = PriceLimitMiddleware(max_price=1.0, model_name="test-model", pricing=pricing)
 
         # Create AI message with usage metadata (1000 input + 500 output = 1500 tokens = $1.50)
         ai_message = AIMessage(
@@ -162,69 +228,48 @@ class TestPriceLimitMiddleware:
         with pytest.raises(RuntimeError, match="Price limit exceeded"):
             middleware.after_model(state3, cast(Runtime, None))
 
+    def test_uses_default_pricing_when_model_not_found(self):
+        """Test that default pricing is used when model not in pricing dict."""
+        from langchain_core.messages import AIMessage
 
-class TestBuildMiddlewareStack:
-    """Test build_middleware_stack function."""
+        pricing = {"other-model": (0.001, 0.002)}
+        middleware = PriceLimitMiddleware(max_price=1.0, model_name="test-model", pricing=pricing)
 
-    def test_builds_basic_stack(self):
-        """Test that basic middleware stack is built correctly.
-        
-        Note: Even with default config, HumanInTheLoopMiddleware is added
-        because build_interrupt_config() always includes dangerous tools
-        (bash, write_file, etc.) for security.
-        """
-        from langchain.agents.middleware import HumanInTheLoopMiddleware
+        # Create AI message with unknown model
+        ai_message = AIMessage(
+            content="response",
+            usage_metadata={
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+            },
+        )
+        state = {"model_name": "unknown-model", "messages": [ai_message]}
 
-        config = VibeConfig()
-        model = None  # Mock model
-        backend = None  # Mock backend
+        # Should not raise because default pricing (0.0, 0.0) means free
+        result = middleware.after_model(state, cast(Runtime, None))
+        assert result is None
 
-        middleware = build_middleware_stack(config, model, backend)
+    def test_no_error_without_usage_metadata(self):
+        """Test that no error is raised when usage_metadata is not present."""
+        middleware = PriceLimitMiddleware(
+            max_price=0.01, model_name="test-model", pricing={}
+        )
 
-        # With default config, HumanInTheLoopMiddleware should be present
-        # because dangerous tools are always added to interrupt_on
-        assert isinstance(middleware, list)
-        assert len(middleware) == 1
-        assert isinstance(middleware[0], HumanInTheLoopMiddleware)
+        # Create AI message without usage_metadata
+        ai_message = AIMessage(content="response")
+        state = {"model_name": "test-model", "messages": [ai_message]}
 
-    def test_includes_subagents_when_enabled(self):
-        """Test that SubAgentMiddleware is not manually included (it's handled by DeepAgents)."""
-        config = VibeConfig(enable_subagents=True)
-        model = None
-        backend = None
+        # Should not raise
+        result = middleware.after_model(state, cast(Runtime, None))
+        assert result is None
 
-        middleware = build_middleware_stack(config, model, backend)
+    def test_before_model_returns_none(self):
+        """Test that before_model always returns None."""
+        middleware = PriceLimitMiddleware(
+            max_price=1.0, model_name="test-model", pricing={}
+        )
+        state = {"messages": []}
 
-        # SubAgentMiddleware is provided automatically by DeepAgents, not manually added
-        assert not any("SubAgentMiddleware" in str(type(m)) for m in middleware)
-
-    def test_excludes_subagents_when_disabled(self):
-        """Test that SubAgentMiddleware is not manually included (it's handled by DeepAgents)."""
-        config = VibeConfig(enable_subagents=False)
-        model = None
-        backend = None
-
-        middleware = build_middleware_stack(config, model, backend)
-
-        # SubAgentMiddleware is provided automatically by DeepAgents, not manually added
-        assert not any("SubAgentMiddleware" in str(type(m)) for m in middleware)
-
-    def test_includes_price_limit_when_configured(self):
-        """Test that PriceLimitMiddleware is included when max_price is set."""
-        config = VibeConfig(max_price=10.0)
-        model = None
-        backend = None
-
-        middleware = build_middleware_stack(config, model, backend)
-
-        assert any("PriceLimitMiddleware" in str(type(m)) for m in middleware)
-
-    def test_excludes_price_limit_when_not_configured(self):
-        """Test that PriceLimitMiddleware is excluded when max_price is None."""
-        config = VibeConfig(max_price=None)
-        model = None
-        backend = None
-
-        middleware = build_middleware_stack(config, model, backend)
-
-        assert not any("PriceLimitMiddleware" in str(type(m)) for m in middleware)
+        result = middleware.before_model(state, cast(Runtime, None))
+        assert result is None

@@ -1,3 +1,13 @@
+"""LangChain 1.2.0 middleware for Mistral Vibe.
+
+This module provides custom middleware implementations for the Vibe agent:
+- ContextWarningMiddleware: Warns when context usage reaches threshold
+- PriceLimitMiddleware: Stops execution when price limit is exceeded
+
+These middleware classes are designed to work natively with LangChain 1.2.0
+without any DeepAgents dependencies.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -9,23 +19,35 @@ from langchain_core.messages import AIMessage
 if TYPE_CHECKING:
     from langgraph.runtime import Runtime
 
-    from vibe.core.config import VibeConfig
-
 
 class ContextWarningMiddleware(AgentMiddleware):
     """Warn user when context usage reaches threshold.
-
-    Preserves Vibe's context warning functionality by injecting warnings
-    into the conversation when token usage exceeds the configured threshold.
+    
+    This middleware checks the current token count before each model call
+    and injects a warning message into the state when usage exceeds
+    the configured threshold percentage of max_context.
+    
+    Token counts are obtained from AIMessage.usage_metadata when available,
+    falling back to character-based estimation if not present.
+    
+    Example:
+        middleware = ContextWarningMiddleware(
+            threshold_percent=0.5,  # Warn at 50%
+            max_context=100000,      # 100K token max context
+        )
     """
-
-    @property
-    def name(self) -> str:
-        return "context_warning"
-
+    
     def __init__(
-        self, threshold_percent: float = 0.5, max_context: int | None = None
+        self,
+        threshold_percent: float = 0.5,
+        max_context: int | None = None,
     ) -> None:
+        """Initialize the context warning middleware.
+        
+        Args:
+            threshold_percent: Percentage of max_context at which to warn (0.0-1.0)
+            max_context: Maximum context window size in tokens
+        """
         self.threshold_percent = threshold_percent
         self.max_context = max_context
         self._warned = False
@@ -33,7 +55,15 @@ class ContextWarningMiddleware(AgentMiddleware):
     def before_model(
         self, state: AgentState, runtime: Runtime
     ) -> dict[str, Any] | None:
-        """Check context usage before model call and inject warning if needed."""
+        """Check context usage before model call and inject warning if needed.
+        
+        Args:
+            state: Current agent state containing messages
+            runtime: Runtime context for the middleware
+            
+        Returns:
+            dict with "warning" key if threshold exceeded, None otherwise
+        """
         if self._warned or self.max_context is None:
             return None
 
@@ -42,9 +72,7 @@ class ContextWarningMiddleware(AgentMiddleware):
 
         if current_tokens >= self.max_context * self.threshold_percent:
             self._warned = True
-            # Inject warning message into the conversation
             warning_message = self._create_warning(current_tokens, self.max_context)
-            # Return dict to modify state - the runtime will handle displaying this
             return {"warning": warning_message}
 
         return None
@@ -54,7 +82,14 @@ class ContextWarningMiddleware(AgentMiddleware):
         return None
 
     def _get_current_token_count(self, state: AgentState) -> int:
-        """Get current token count from usage metadata or estimate from messages."""
+        """Get current token count from usage metadata or estimate from messages.
+        
+        Args:
+            state: Current agent state containing messages
+            
+        Returns:
+            Token count from usage_metadata or estimated count
+        """
         # Check if we have usage metadata from previous AI responses
         messages = state.get("messages", [])
         for msg in reversed(messages):
@@ -68,7 +103,16 @@ class ContextWarningMiddleware(AgentMiddleware):
         return self._estimate_tokens(messages)
 
     def _estimate_tokens(self, messages: list) -> int:
-        """Rough token estimation: ~4 characters per token."""
+        """Rough token estimation: ~4 characters per token.
+        
+        This is a fallback when usage_metadata is not available.
+        
+        Args:
+            messages: List of messages to estimate
+            
+        Returns:
+            Estimated token count
+        """
         total_chars = 0
         for msg in messages:
             content = getattr(msg, "content", msg)
@@ -86,7 +130,15 @@ class ContextWarningMiddleware(AgentMiddleware):
         return total_chars // 4
 
     def _create_warning(self, current_tokens: int, max_tokens: int) -> str:
-        """Create a formatted warning message."""
+        """Create a formatted warning message.
+        
+        Args:
+            current_tokens: Current token count
+            max_tokens: Maximum allowed tokens
+            
+        Returns:
+            Formatted warning message string
+        """
         percentage_used = (current_tokens / max_tokens) * 100
         return (
             f"You have used {percentage_used:.0f}% of your total context "
@@ -96,21 +148,37 @@ class ContextWarningMiddleware(AgentMiddleware):
 
 class PriceLimitMiddleware(AgentMiddleware):
     """Stop execution when price limit is exceeded.
-
-    Preserves Vibe's cost control functionality by tracking cumulative
-    cost across model calls and raising an interrupt when the limit is reached.
+    
+    This middleware tracks cumulative cost across model calls and raises
+    a RuntimeError when the total exceeds the configured max_price.
+    
+    Cost is calculated using actual token counts from usage_metadata
+    multiplied by the per-token pricing rates.
+    
+    Example:
+        middleware = PriceLimitMiddleware(
+            max_price=10.0,  # $10 limit
+            model_name="gpt-4o",
+            pricing={
+                "gpt-4o": (0.000005, 0.000015),  # $5/$15 per 1M tokens
+            },
+        )
     """
-
-    @property
-    def name(self) -> str:
-        return "price_limit"
-
+    
     def __init__(
         self,
         max_price: float,
         model_name: str,
         pricing: dict[str, tuple[float, float]] | None = None,
-    ):
+    ) -> None:
+        """Initialize the price limit middleware.
+        
+        Args:
+            max_price: Maximum total cost allowed in dollars
+            model_name: The name of the model to use for pricing lookup
+            pricing: Dict mapping model names to (input_rate, output_rate) tuples
+                    Rates are per-token (not per-million-tokens)
+        """
         self.max_price = max_price
         self.model_name = model_name
         self.pricing = pricing or {}  # model_name -> (input_rate, output_rate)
@@ -119,13 +187,24 @@ class PriceLimitMiddleware(AgentMiddleware):
     def before_model(
         self,
         state: AgentState,
-        runtime,  # type: ignore
+        runtime: Runtime,
     ) -> dict[str, Any] | None:
         """No action needed before model call."""
         return None
 
     def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
-        """Track cost after each model call and raise error if limit exceeded."""
+        """Track cost after each model call and raise error if limit exceeded.
+        
+        Args:
+            state: Current agent state containing messages
+            runtime: Runtime context for the middleware
+            
+        Returns:
+            None
+            
+        Raises:
+            RuntimeError: If cumulative cost exceeds max_price
+        """
         # Get the latest AI message from state
         messages = state.get("messages", [])
         if messages and isinstance(messages[-1], AIMessage):
@@ -147,64 +226,3 @@ class PriceLimitMiddleware(AgentMiddleware):
                     )
 
         return None
-
-
-def build_middleware_stack(
-    config: VibeConfig,
-    model: "BaseChatModel",  # type: ignore
-    backend: "BackendProtocol",  # type: ignore
-) -> list[AgentMiddleware]:
-    """Build the complete middleware stack for the agent.
-
-    Order is important for correct execution:
-    1. Subagents (SubAgentMiddleware, optional) - DeepAgents provides TodoList and Filesystem by default
-    2. Context warnings (ContextWarningMiddleware, Vibe-specific)
-    3. Price limit (PriceLimitMiddleware, Vibe-specific)
-    4. Human-in-the-loop (HumanInTheLoopMiddleware, for approvals)
-    """
-    from langchain.agents.middleware import HumanInTheLoopMiddleware
-
-    from deepagents.middleware.subagents import SubAgentMiddleware
-
-    middleware: list[AgentMiddleware] = []
-
-    # DeepAgents provides TodoListMiddleware, FilesystemMiddleware, and SubAgentMiddleware by default
-    # Only add custom middleware that's not already provided by DeepAgents
-
-    # 1. Subagents (optional, Vibe-specific) - handled by DeepAgents automatically
-    # Note: Don't add SubAgentMiddleware manually as it causes duplicate middleware error
-
-    # 2. Context warnings (Vibe-specific)
-    if config.context_warnings:
-        middleware.append(
-            ContextWarningMiddleware(
-                threshold_percent=0.5, max_context=config.auto_compact_threshold
-            )
-        )
-
-    # 3. Price limit (Vibe-specific)
-    if config.max_price is not None:
-        # Get pricing from model config
-        pricing = {}
-        for model_config in config.models:
-            pricing[model_config.name] = (
-                model_config.input_price / 1_000_000,  # Convert to per-token rate
-                model_config.output_price / 1_000_000,
-            )
-
-        # Get the active model's name for pricing lookup
-        active_model = config.get_active_model()
-        model_name = active_model.name
-
-        middleware.append(PriceLimitMiddleware(config.max_price, model_name, pricing))
-
-    # 4. Human-in-the-loop (for approvals) - independent of price limit
-    from vibe.core.engine.permissions import build_interrupt_config
-
-    interrupt_on = build_interrupt_config(config)
-    if interrupt_on:
-        from langchain.agents.middleware import HumanInTheLoopMiddleware
-
-        middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
-
-    return middleware
