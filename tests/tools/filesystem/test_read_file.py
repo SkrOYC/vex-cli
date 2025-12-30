@@ -232,9 +232,9 @@ class TestContentViewMode:
 
         assert result.content is not None
         assert result.content.line_count == 3
-        assert "1| line1" in result.content.output
-        assert "2| line2" in result.content.output
-        assert "3| line3" in result.content.output
+        assert "1→line1" in result.content.output
+        assert "2→line2" in result.content.output
+        assert "3→line3" in result.content.output
 
     async def test_content_view_with_valid_range(
         self, tool: ReadFileTool, temp_dir: Path
@@ -251,12 +251,12 @@ class TestContentViewMode:
         assert result.content is not None
         assert result.content.line_count == 5
         # Should show lines 2, 3, 4
-        assert "2| line2" in result.content.output
-        assert "3| line3" in result.content.output
-        assert "4| line4" in result.content.output
+        assert "2→line2" in result.content.output
+        assert "3→line3" in result.content.output
+        assert "4→line4" in result.content.output
         # Should not show lines 1 and 5
-        assert "1| line1" not in result.content.output
-        assert "5| line5" not in result.content.output
+        assert "1→line1" not in result.content.output
+        assert "5→line5" not in result.content.output
 
     async def test_content_view_with_end_minus_one(
         self, tool: ReadFileTool, temp_dir: Path
@@ -272,9 +272,9 @@ class TestContentViewMode:
 
         assert result.content is not None
         # Should show lines 3, 4, 5
-        assert "3| line3" in result.content.output
-        assert "4| line4" in result.content.output
-        assert "5| line5" in result.content.output
+        assert "3→line3" in result.content.output
+        assert "4→line4" in result.content.output
+        assert "5→line5" in result.content.output
 
     async def test_content_view_range_out_of_bounds(
         self, tool: ReadFileTool, temp_dir: Path
@@ -378,7 +378,7 @@ def function2():
 
         assert result.content is not None
         # Should show first 100 lines
-        assert "1| line1" in result.content.output
+        assert "1→line1" in result.content.output
         # Should have fallback message
         assert (
             "Unsupported language" in result.content.output
@@ -428,8 +428,8 @@ def function2():
 
         assert result.content is not None
         # Should use content mode because view_range is specified
-        assert "2| line2" in result.content.output
-        assert "3| line3" in result.content.output
+        assert "2→line2" in result.content.output
+        assert "3→line3" in result.content.output
 
 
 # =============================================================================
@@ -715,8 +715,8 @@ class TestLineNumberFormatting:
 
         assert result.content is not None
         # Line 1 should have padding to match line 100
-        assert "  1| line 0" in result.content.output
-        assert "100| line 99" in result.content.output
+        assert "  1→line 0" in result.content.output
+        assert "100→line 99" in result.content.output
 
 
 # =============================================================================
