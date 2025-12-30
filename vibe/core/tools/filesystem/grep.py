@@ -369,6 +369,60 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
     # File Discovery
     # =============================================================================
 
+    def _discover_files_by_pattern(
+        self, search_path: Path, patterns: list[str], recursive: bool
+    ) -> set[Path]:
+        """Discover files matching the given patterns.
+
+        Args:
+            search_path: Directory to search in.
+            patterns: List of file patterns to match.
+            recursive: Whether to search recursively.
+
+        Returns:
+            Set of file paths matching the patterns.
+        """
+        candidate_files: set[Path] = set()
+        glob_method = search_path.rglob if recursive else search_path.glob
+
+        for pattern in patterns:
+            for file_path in glob_method(pattern):
+                if file_path.is_file():
+                    candidate_files.add(file_path)
+
+        return candidate_files
+
+    def _filter_hidden_files(
+        self, candidate_files: set[Path], search_path: Path, include_hidden: bool
+    ) -> set[Path]:
+        """Filter out hidden files and files in hidden directories.
+
+        Args:
+            candidate_files: Set of file paths to filter.
+            search_path: The base search directory.
+            include_hidden: Whether to include hidden files.
+
+        Returns:
+            Filtered set of file paths.
+        """
+        if include_hidden:
+            return candidate_files
+
+        filtered_files: set[Path] = set()
+        for file_path in candidate_files:
+            try:
+                relative_path = file_path.relative_to(search_path)
+                # Check if any path component starts with dot
+                if any(part.startswith(".") for part in relative_path.parts):
+                    continue
+            except ValueError:
+                # Fallback for paths not directly under search_path (e.g., symlinks)
+                if file_path.name.startswith("."):
+                    continue
+            filtered_files.add(file_path)
+
+        return filtered_files
+
     async def _get_text_files_for_search(
         self, search_path: Path, args: GrepArgs
     ) -> list[Path]:
@@ -381,50 +435,26 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         Returns:
             List of text file paths to search.
         """
-        # Use set for O(1) lookup to avoid O(n²) complexity
-        candidate_files: set[Path] = set()
-
+        # Discover files by pattern
         if args.patterns:
-            # Use provided patterns
-            for pattern in args.patterns:
-                if args.recursive:
-                    matches = search_path.rglob(pattern)
-                else:
-                    matches = search_path.glob(pattern)
-
-                for file_path in matches:
-                    if file_path.is_file():
-                        candidate_files.add(file_path)
-        # No patterns - search all files in directory
-        elif args.recursive:
-            # Use rglob("*") to find all files recursively (equivalent to **/*)
-            for file_path in search_path.rglob("*"):
-                if file_path.is_file():
-                    candidate_files.add(file_path)
+            candidate_files = self._discover_files_by_pattern(
+                search_path, args.patterns, args.recursive
+            )
         else:
-            # Use glob("*") for immediate children only
-            for file_path in search_path.glob("*"):
-                if file_path.is_file():
-                    candidate_files.add(file_path)
+            # No patterns - search all files
+            candidate_files = self._discover_files_by_pattern(
+                search_path, ["*"], args.recursive
+            )
 
-        # Filter text files with proper hidden directory handling
-        text_files: list[Path] = []
-        for file_path in candidate_files:
-            # Exclude hidden files and files in hidden directories unless requested
-            if not args.include_hidden:
-                try:
-                    # Get relative path to check all parts
-                    relative_path = file_path.relative_to(search_path)
-                    # Check if any path component starts with dot
-                    if any(part.startswith(".") for part in relative_path.parts):
-                        continue
-                except ValueError:
-                    # Fallback for paths not directly under search_path (e.g., symlinks)
-                    if file_path.name.startswith("."):
-                        continue
+        # Filter hidden files and directories
+        candidate_files = self._filter_hidden_files(
+            candidate_files, search_path, args.include_hidden
+        )
 
-            if self._is_text_file(file_path):
-                text_files.append(file_path)
+        # Filter text files
+        text_files: list[Path] = [
+            fp for fp in candidate_files if self._is_text_file(fp)
+        ]
 
         # Sort alphabetically (case-insensitive)
         text_files.sort(key=lambda p: str(p).casefold())
