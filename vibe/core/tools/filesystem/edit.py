@@ -67,6 +67,22 @@ class EditResult(BaseModel):
     output: str
 
 
+class WarnedOperation(BaseModel):
+    """Represents a warned edit operation for retry logic.
+
+    Attributes:
+        timestamp: When the warning was issued (milliseconds since epoch).
+        old_content_hash: Hash of the old content for comparison.
+        new_content_hash: Hash of the new content for comparison.
+    """
+
+    timestamp: int
+    old_content_hash: str
+    new_content_hash: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 # =============================================================================
 # Tool Configuration and State
 # =============================================================================
@@ -97,7 +113,7 @@ class EditToolState(BaseToolState):
 
     model_config = ConfigDict(extra="forbid")
 
-    warned_operations: dict[str, dict[str, int | str]] = Field(default_factory=dict)
+    warned_operations: dict[str, WarnedOperation] = Field(default_factory=dict)
 
 
 # =============================================================================
@@ -132,7 +148,7 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
 
     # Constants matching TypeScript implementation
     _HASH_MULTIPLIER: int = 31
-    _BIT_MASK_32: int = 0x1_00_00_00  # 2^32
+    _BIT_MASK_32: int = 0x1_00_00_00_00  # 2^32
     _BASE_36: int = 36
 
     async def run(self, args: EditArgs) -> EditResult:
@@ -168,7 +184,10 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
             )
 
         # Check if file was viewed before editing
-        if self.config.view_tracker is None:
+        if (
+            self.config.view_tracker is None
+            or not self.config.view_tracker.has_been_viewed(str(resolved_path))
+        ):
             raise FileSystemError(
                 message=f"File '{resolved_path}' must be viewed before editing\n\n"
                 "Use 'read_file' command to examine file content first.",
@@ -176,8 +195,6 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
                 path=str(resolved_path),
                 suggestions=["Use 'read_file' command to examine file content first."],
             )
-
-        if not self.config.view_tracker.has_been_viewed(str(resolved_path)):
             raise FileSystemError(
                 message=f"File '{resolved_path}' must be viewed before editing\n\n"
                 "Use 'read_file' command to examine file content first.",
@@ -276,28 +293,47 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
     # =============================================================================
 
     @staticmethod
+    def _to_base36(n: int) -> str:
+        """Converts a non-negative integer to its base-36 representation.
+
+        Args:
+            n: Non-negative integer to convert.
+
+        Returns:
+            Base-36 string representation (digits 0-9, letters a-z).
+        """
+        if n == 0:
+            return "0"
+
+        chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+        result = ""
+        while n > 0:
+            n, remainder = divmod(n, 36)
+            result = chars[remainder] + result
+        return result
+
+    @staticmethod
     def _hash_content(content: str) -> str:
         """Generate a simple hash of the content for tracking operations.
 
         Matches TypeScript implementation exactly:
         - HASH_MULTIPLIER = 31
-        - BIT_MASK_32 = 0x1_00_00_00 (2^32)
-        - BASE_36 for string representation
+        - BIT_MASK_32 = 0x1_00_00_00_00 (2^32)
+        - BASE_36 for string representation (using toString(36))
 
         Args:
             content: The content to hash.
 
         Returns:
-            A 9-digit base-36 string hash of the content.
+            A base-36 string hash of the content (variable length).
         """
         hash_value = 0
-        for i in range(len(content)):
-            char = content[i]
+        for char in content:
             hash_value = (
                 hash_value * EditTool._HASH_MULTIPLIER + ord(char)
             ) % EditTool._BIT_MASK_32
 
-        return str(abs(hash_value)).zfill(9)
+        return EditTool._to_base36(abs(hash_value))
 
     # =============================================================================
     # Mistaken Edit Detection
@@ -350,21 +386,29 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
     def _check_line_similarity(self, old_content: str, new_content: str) -> bool:
         """Check if old and new content have high line similarity.
 
+        Uses Jaccard similarity (intersection / union) of unique lines for
+        accurate comparison. This avoids skewing from duplicate lines.
+
         Args:
             old_content: Current content of the file.
             new_content: Proposed new content.
 
         Returns:
-            True if more than 70% of lines match.
+            True if more than 70% of unique lines match.
         """
-        old_lines = old_content.split("\n")
-        new_lines = new_content.split("\n")
+        old_lines = set(old_content.split("\n"))
+        new_lines = set(new_content.split("\n"))
 
-        # Use sets for faster matching
-        old_line_set = set(old_lines)
-        matching_lines = sum(1 for line in new_lines if line in old_line_set)
-        similarity = matching_lines / max(len(old_lines), len(new_lines))
+        if len(old_lines) == 0 and len(new_lines) == 0:
+            return True
 
+        intersection_len = len(old_lines.intersection(new_lines))
+        union_len = len(old_lines.union(new_lines))
+
+        if union_len == 0:
+            return True
+
+        similarity = intersection_len / union_len
         return similarity > LINE_SIMILARITY_THRESHOLD
 
     def _check_length_diff(self, old_content: str, new_content: str) -> bool:
@@ -409,13 +453,7 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
 
         warning = self.state.warned_operations[file_path]
         current_time = int(time.time() * 1000)
-
-        # Type-safe access to timestamp
-        warning_timestamp = warning.get("timestamp")
-        if not isinstance(warning_timestamp, int):
-            return False
-
-        time_diff = current_time - warning_timestamp
+        time_diff = current_time - warning.timestamp
 
         if time_diff > MISTAKEN_EDIT_TIMEOUT_MS:
             # Expired warning, remove it
@@ -423,13 +461,10 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
             return False
 
         # Check if hashes match (same operation)
-        # Type-safe access to hashes
-        old_hash = warning.get("old_content_hash")
-        new_hash = warning.get("new_content_hash")
-        if not isinstance(old_hash, str) or not isinstance(new_hash, str):
-            return False
-
-        hash_matches = old_hash == old_content_hash and new_hash == new_content_hash
+        hash_matches = (
+            warning.old_content_hash == old_content_hash
+            and warning.new_content_hash == new_content_hash
+        )
 
         return hash_matches
 
@@ -443,11 +478,11 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
             old_content_hash: Hash of the old content.
             new_content_hash: Hash of the new content.
         """
-        self.state.warned_operations[file_path] = {
-            "timestamp": int(time.time() * 1000),
-            "old_content_hash": old_content_hash,
-            "new_content_hash": new_content_hash,
-        }
+        self.state.warned_operations[file_path] = WarnedOperation(
+            timestamp=int(time.time() * 1000),
+            old_content_hash=old_content_hash,
+            new_content_hash=new_content_hash,
+        )
 
     def _cleanup_expired_warnings(self) -> None:
         """Clean up expired warned operations."""
@@ -455,12 +490,7 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
 
         expired_keys = []
         for key, warning in self.state.warned_operations.items():
-            warning_timestamp = warning.get("timestamp")
-            if not isinstance(warning_timestamp, int):
-                expired_keys.append(key)
-                continue
-
-            if current_time - warning_timestamp >= MISTAKEN_EDIT_TIMEOUT_MS:
+            if current_time - warning.timestamp >= MISTAKEN_EDIT_TIMEOUT_MS:
                 expired_keys.append(key)
 
         for key in expired_keys:

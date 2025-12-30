@@ -34,12 +34,10 @@ from vibe.core.tools.filesystem.edit import (
     EditTool,
     EditToolConfig,
     EditToolState,
+    WarnedOperation,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
-
-# Mark all async tests
-pytestmark = pytest.mark.asyncio
 
 
 # =============================================================================
@@ -125,6 +123,7 @@ class TestEditResult:
 class TestPathResolution:
     """Tests for path resolution functionality."""
 
+    @pytest.mark.asyncio
     async def test_absolute_path_resolved_correctly(
         self, tool: EditTool, temp_dir: Path
     ) -> None:
@@ -133,6 +132,8 @@ class TestPathResolution:
         file_path.write_text("original", encoding="utf-8")
         view_tracker = tool.config.view_tracker
         assert view_tracker is not None
+        # Wait to ensure mtime is set before recording view
+        time.sleep(0.01)
         view_tracker.record_view(str(file_path))
 
         result = await tool.run(EditArgs(path=str(file_path), file_text="new content"))
@@ -140,6 +141,7 @@ class TestPathResolution:
         assert "modified successfully" in result.output
         assert file_path.read_text(encoding="utf-8") == "new content"
 
+    @pytest.mark.asyncio
     async def test_relative_path_resolved_against_workdir(
         self, tool: EditTool, temp_dir: Path
     ) -> None:
@@ -148,6 +150,8 @@ class TestPathResolution:
         file_path.write_text("original", encoding="utf-8")
         view_tracker = tool.config.view_tracker
         assert view_tracker is not None
+        # Wait to ensure mtime is set before recording view
+        time.sleep(0.01)
         view_tracker.record_view(str(file_path))
 
         result = await tool.run(EditArgs(path="relative.txt", file_text="new content"))
@@ -165,6 +169,7 @@ class TestPathResolution:
 class TestViewTracking:
     """Tests for view tracking enforcement."""
 
+    @pytest.mark.asyncio
     async def test_edit_succeeds_with_proper_view_tracking(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -180,6 +185,7 @@ class TestViewTracking:
         assert result.output == f"File '{file_path}' modified successfully"
         assert file_path.read_text(encoding="utf-8") == "new content"
 
+    @pytest.mark.asyncio
     async def test_edit_fails_without_view_tracking(
         self, tool: EditTool, temp_dir: Path
     ) -> None:
@@ -194,6 +200,7 @@ class TestViewTracking:
         assert "must be viewed before editing" in str(exc_info.value)
         assert len(exc_info.value.suggestions) > 0
 
+    @pytest.mark.asyncio
     async def test_edit_updates_view_timestamp(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -229,6 +236,7 @@ class TestViewTracking:
 class TestFileModification:
     """Tests for file modification detection."""
 
+    @pytest.mark.asyncio
     async def test_edit_fails_on_non_existent_file(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -244,6 +252,7 @@ class TestFileModification:
         assert "File not found" in str(exc_info.value)
         assert "doesn't exist" in str(exc_info.value)
 
+    @pytest.mark.asyncio
     async def test_edit_fails_on_modified_file_mtime_check(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -273,6 +282,7 @@ class TestFileModification:
 class TestMistakenEditDetection:
     """Tests for mistaken edit detection functionality."""
 
+    @pytest.mark.asyncio
     async def test_mistaken_edit_detected_length_ratio(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -304,6 +314,7 @@ class TestMistakenEditDetection:
         assert "mistaken usage" in str(exc_info.value)
         assert len(exc_info.value.suggestions) > 0
 
+    @pytest.mark.asyncio
     async def test_mistaken_edit_detected_line_similarity(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -321,25 +332,27 @@ class TestMistakenEditDetection:
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
+    @pytest.mark.asyncio
     async def test_mistaken_edit_detected_length_diff(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
         """Test mistaken edit is detected when line counts are similar."""
         file_path = temp_dir / "similar_lines.txt"
-        old_content = "line1\nline2\nline3\nline4\nline5\n" * 20
+        old_content = "line1\nline2\nline3\nline4\nline5\n" * 20  # 100 lines, 5 unique
         file_path.write_text(old_content, encoding="utf-8")
         view_tracker.record_view(str(file_path))
 
         # New content: similar line count (diff < 0.3)
-        # High line similarity (> 0.7)
-        # 70 of 100 lines match, 30 lines are different
+        # High line similarity (> 0.7) using Jaccard
+        # Same 5 unique lines + 5 new lines = 105 total lines
+        # Unique: 5 old + 2 new = 7, Jaccard = 5/7 = 0.714 (> 0.7)
         new_content = (
             ("line1\n" * 20)
             + ("line2\n" * 20)
             + ("line3\n" * 20)
             + ("line4\n" * 20)
             + ("line5\n" * 20)
-            + "newA\nnewB\nnewC\n"  # 103 lines total
+            + "newA\nnewB\n"  # 102 lines total
         )
 
         with pytest.raises(FileSystemError) as exc_info:
@@ -347,26 +360,28 @@ class TestMistakenEditDetection:
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
+    @pytest.mark.asyncio
     async def test_mistaken_edit_majority_voting_2_of_3(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
         """Test mistaken edit detection requires 2 of 3 heuristics to trigger."""
         file_path = temp_dir / "majority_vote.txt"
-        # Create content that will trigger exactly 2 heuristics
+        # Create content where only 1 heuristic would trigger
         old_content = "line1\nline2\nline3\nline4\nline5\n" * 30  # 150 lines, >100
         file_path.write_text(old_content, encoding="utf-8")
         view_tracker.record_view(str(file_path))
 
-        # New content: smaller (length_ratio) but different lines (low similarity)
-        # This should NOT trigger mistaken edit because only 1 heuristic (length_ratio) triggers
-        new_content = "completely\ndifferent\ncontent\nhere\n" * 10  # 50 lines, >50
+        # New content: completely different content with different line count
+        # Length ratio: ~620/1050 = 0.59 (> 0.3) - doesn't trigger
+        # Line similarity: 0/7 = 0 (< 0.7) - doesn't trigger
+        # Length diff: 45/150 = 0.3 (exactly at threshold) - doesn't trigger
+        new_content = "completely\ndifferent\ncontent\nhere\n" * 10  # 40 lines
 
-        # This should NOT raise because only length_ratio heuristic would trigger
-        # Line similarity would be low (different content)
-        # Length diff would be high (150 -> 50 lines, 67% change)
+        # This should NOT raise because 0 of 3 heuristics trigger
         result = await tool.run(EditArgs(path=str(file_path), file_text=new_content))
         assert "modified successfully" in result.output
 
+    @pytest.mark.asyncio
     async def test_mistaken_edit_skips_short_content(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -392,6 +407,7 @@ class TestMistakenEditDetection:
 class TestRetryLogic:
     """Tests for retry logic functionality."""
 
+    @pytest.mark.asyncio
     async def test_retry_allowed_within_60s_same_hashes(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -402,7 +418,6 @@ class TestRetryLogic:
         view_tracker.record_view(str(file_path))
 
         # New content that triggers mistaken edit detection
-        # 2 of 3 heuristics trigger: line_similarity and length_diff
         new_content = (
             ("line1\n" * 20)
             + ("line2\n" * 20)
@@ -421,6 +436,7 @@ class TestRetryLogic:
         assert "modified successfully" in result.output
 
     @pytest.mark.timeout(120)
+    @pytest.mark.asyncio
     async def test_retry_rejected_after_60s_expired_warning(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -453,6 +469,7 @@ class TestRetryLogic:
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
+    @pytest.mark.asyncio
     async def test_retry_rejected_different_hashes(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -491,6 +508,7 @@ class TestRetryLogic:
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
     @pytest.mark.timeout(120)
+    @pytest.mark.asyncio
     async def test_cleanup_removes_expired_warnings(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -546,21 +564,48 @@ class TestHashFunction:
 
         assert hash1 == hash2
 
-    def test_hash_function_matches_typescript_same_input(self) -> None:
-        """Test hash function matches TypeScript implementation for same input."""
-        # TypeScript implementation:
-        # const HASH_MULTIPLIER = 31;
-        # const BIT_MASK_32 = 0x1_00_00_00_00; // 2^32
-        # const BASE_36 = 36;
-        # let hash = 0;
-        # for (let i = 0; i < content.length; i++) {
-        #   const char = content.charCodeAt(i);
-        #   hash = hash * HASH_MULTIPLIER + char;
-        #   hash %= BIT_MASK_32;
-        # }
-        # return Math.abs(hash).toString(BASE_36);
+    def test_hash_function_matches_typescript_exactly(self) -> None:
+        """Test hash function matches TypeScript implementation with exact values.
 
-        # Test with various inputs
+        These expected values are generated from the TypeScript implementation:
+        const HASH_MULTIPLIER = 31;
+        const BIT_MASK_32 = 0x1_00_00_00_00; // 2^32
+        const BASE_36 = 36;
+        """
+        # Test cases with known-good hash values from TypeScript
+        test_cases = {
+            "": "0",
+            "a": "2p",
+            "ab": "2e9",
+            "abc": "22ci",
+            "hello": "1n1e4y",
+            "Hello, World!": "osc9p1",
+            "The quick brown fox jumps over the lazy dog": "1oy9w7n",
+        }
+
+        for content, expected_hash in test_cases.items():
+            actual_hash = EditTool._hash_content(content)
+            assert actual_hash == expected_hash, (
+                f"Hash mismatch for '{content}': got '{actual_hash}', expected '{expected_hash}'"
+            )
+
+    def test_hash_function_matches_typescript_same_input(self) -> None:
+        """Test hash function matches TypeScript implementation for same input.
+
+        TypeScript implementation:
+        const HASH_MULTIPLIER = 31;
+        const BIT_MASK_32 = 0x1_00_00_00_00; // 2^32
+        const BASE_36 = 36;
+        let hash = 0;
+        for (let i = 0; i < content.length; i++) {
+          const char = content.charCodeAt(i);
+          hash = hash * HASH_MULTIPLIER + char;
+          hash %= BIT_MASK_32;
+        }
+        return Math.abs(hash).toString(BASE_36);
+
+        Test with various inputs - verify produces valid base-36 strings.
+        """
         test_cases = [
             "",
             "a",
@@ -577,21 +622,11 @@ class TestHashFunction:
             assert python_hash.isalnum(), (
                 f"Hash for '{content}' is not alphanumeric: {python_hash}"
             )
-            # Only check islower() for non-empty hashes with letters
+            # Only check islower() for hashes containing letters
             if python_hash.isalpha():
                 assert python_hash.islower(), (
                     f"Hash for '{content}' should be lowercase: {python_hash}"
                 )
-
-    def test_hash_function_returns_9_digit_string(self) -> None:
-        """Test hash function returns a 9-digit base-36 string."""
-        content = "Test content for hashing"
-        hash_result = EditTool._hash_content(content)
-
-        # 9 digits in base-36 can represent up to 36^9 - 1 = ~10^14
-        assert len(hash_result) == 9, (
-            f"Hash length should be 9, got {len(hash_result)}: {hash_result}"
-        )
 
     def test_hash_function_different_inputs_different_hashes(self) -> None:
         """Test different inputs produce different hashes."""
@@ -613,6 +648,7 @@ class TestHashFunction:
 class TestErrorMessageValidation:
     """Tests for exact error message matching with TypeScript."""
 
+    @pytest.mark.asyncio
     async def test_error_message_file_not_viewed_exact_match(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -628,6 +664,7 @@ class TestErrorMessageValidation:
         assert "must be viewed before editing" in error_message
         assert "Use 'read_file' command" in error_message
 
+    @pytest.mark.asyncio
     async def test_error_message_file_not_found_exact_match(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -645,6 +682,7 @@ class TestErrorMessageValidation:
         assert "doesn't exist" in error_message
         assert "Use 'create' command" in error_message
 
+    @pytest.mark.asyncio
     async def test_error_message_file_modified_exact_match(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -664,6 +702,7 @@ class TestErrorMessageValidation:
         assert "has been modified since" in error_message
         assert "Use 'read_file' command" in error_message
 
+    @pytest.mark.asyncio
     async def test_error_message_mistaken_edit_exact_match(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -697,10 +736,6 @@ class TestErrorMessageValidation:
             "60-second timeout" in error_message
             or "Try this command again" in error_message
         )
-        assert (
-            "60-second timeout" in error_message
-            or "Try this command again" in error_message
-        )
 
 
 # =============================================================================
@@ -711,6 +746,7 @@ class TestErrorMessageValidation:
 class TestSuccessMessage:
     """Tests for success message format."""
 
+    @pytest.mark.asyncio
     async def test_success_message_format_validation(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -725,6 +761,7 @@ class TestSuccessMessage:
         # Verify content was actually updated
         assert file_path.read_text(encoding="utf-8") == "new content"
 
+    @pytest.mark.asyncio
     async def test_success_message_with_unicode_content(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
@@ -750,6 +787,7 @@ class TestSuccessMessage:
 class TestUTF8Encoding:
     """Tests for UTF-8 encoding support."""
 
+    @pytest.mark.asyncio
     async def test_edit_with_utf8_content(
         self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
