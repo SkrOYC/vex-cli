@@ -36,6 +36,15 @@ from vibe.core.tools.filesystem.insert_line import (
     InsertLineResult,
     InsertLineTool,
 )
+from vibe.core.tools.filesystem.read_file import (
+    ReadFileArgs,
+    ReadFileContentResult,
+    ReadFileMediaResult,
+    ReadFileResult,
+    ReadFileTool,
+    ReadFileToolConfig,
+    ReadFileToolState,
+)
 from vibe.core.tools.filesystem.write_file import (
     WriteFileArgs,
     WriteFileResult,
@@ -66,6 +75,13 @@ __all__ = [
     "InsertLineArgs",
     "InsertLineResult",
     "InsertLineTool",
+    "ReadFileArgs",
+    "ReadFileContentResult",
+    "ReadFileMediaResult",
+    "ReadFileResult",
+    "ReadFileTool",
+    "ReadFileToolConfig",
+    "ReadFileToolState",
     "ValidationError",
     "ViewTrackerService",
     "WriteFileArgs",

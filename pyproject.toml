@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "agent-client-protocol==0.6.3",
     "aiofiles>=24.1.0",
+    "ast-grep-py>=0.40.0",
     "httpx>=0.28.1",
     "langchain>=1.2.0",
     "langgraph>=1.0.2,<1.1.0",
