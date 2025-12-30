@@ -46,6 +46,7 @@ class ListFilesArgs(BaseModel):
         recursive: Whether to search subdirectories (default: True).
         max_results: Maximum number of files to return (default: 1000, range: 1-10000).
         include_hidden: Whether to include hidden files and directories (default: False).
+        max_depth: Maximum depth for recursive listing (default: 3, range: 1-10).
     """
 
     path: str = "."
@@ -54,6 +55,7 @@ class ListFilesArgs(BaseModel):
     recursive: bool = True
     max_results: int = Field(default=1000, ge=1, le=10_000)
     include_hidden: bool = False
+    max_depth: int = Field(default=3, ge=1, le=10)
 
 
 class ListFilesResult(BaseModel):
@@ -125,7 +127,6 @@ class ListFilesTool(
 
     # Constants
     _BYTE_SIZE_THRESHOLD: int = 1024  # Bytes per KB
-    _DOUBLE_STAR_PARTS_COUNT: int = 2
 
     async def run(self, args: ListFilesArgs) -> ListFilesResult:
         """Execute the list_files tool operation.
@@ -217,18 +218,14 @@ class ListFilesTool(
         """
         found_files: list[Path] = []
 
-        # If no patterns provided, use default pattern
-        patterns = args.patterns if args.patterns else ["*"]
-
         # Process each pattern
-        for pattern in patterns:
-            effective_pattern = self._process_pattern(pattern, args.recursive)
-
+        for pattern in args.patterns:
             # Use pathlib glob for matching
+            # rglob handles ** automatically, glob handles non-recursive
             if args.recursive:
-                matches = root.rglob(effective_pattern)
+                matches = root.rglob(pattern)
             else:
-                matches = root.glob(effective_pattern)
+                matches = root.glob(pattern)
 
             for file_path in matches:
                 # Only process files (not directories)
@@ -239,8 +236,9 @@ class ListFilesTool(
                 if not args.include_hidden and file_path.name.startswith("."):
                     continue
 
-                # Check exclude patterns
-                if self._matches_any_exclude(str(file_path), args.exclude):
+                # Check exclude patterns using relative path
+                relative_path = str(file_path.relative_to(root))
+                if self._matches_any_exclude(relative_path, args.exclude):
                     continue
 
                 # Check max results
@@ -270,59 +268,20 @@ class ListFilesTool(
 
         return f"Found {len(found_files)} files{truncation_msg}\n\n{file_list}"
 
-    def _process_pattern(self, pattern: str, recursive: bool) -> str:
-        """Process a glob pattern to make it recursive if needed.
-
-        Args:
-            pattern: The glob pattern to process.
-            recursive: Whether to make the pattern recursive.
-
-        Returns:
-            The processed pattern, potentially made recursive.
-        """
-        # If already recursive, absolute path, or contains **, return as-is
-        if not recursive or "**" in pattern or Path(pattern).is_absolute():
-            return pattern
-
-        # Add **/ prefix for recursive search
-        return f"**/{pattern}"
-
     def _matches_any_exclude(self, file_path: str, exclude_patterns: list[str]) -> bool:
         """Check if file path matches any exclude pattern.
 
         Args:
-            file_path: The file path to check.
+            file_path: The file path to check (relative to search root).
             exclude_patterns: List of patterns to exclude.
 
         Returns:
             True if the file matches any exclude pattern.
         """
         for exclude_pattern in exclude_patterns:
-            if self._matches_pattern(file_path, exclude_pattern):
+            if fnmatch(file_path, exclude_pattern):
                 return True
         return False
-
-    def _matches_pattern(self, file_path: str, pattern: str) -> bool:
-        """Check if file path matches glob pattern.
-
-        Args:
-            file_path: The file path to check.
-            pattern: The glob pattern to match against.
-
-        Returns:
-            True if the file matches the pattern.
-        """
-        # Use fnmatch for pattern matching
-        file_name = Path(file_path).name
-
-        # Handle recursive patterns with **
-        if "**" in pattern:
-            parts = pattern.split("**")
-            if len(parts) == self._DOUBLE_STAR_PARTS_COUNT:
-                base_pattern = parts[1].lstrip("/")
-                return fnmatch(file_name, base_pattern)
-
-        return fnmatch(file_name, pattern)
 
     # =============================================================================
     # list Command
@@ -390,7 +349,7 @@ class ListFilesTool(
         Returns:
             Formatted directory tree.
         """
-        max_depth = getattr(args, "max_depth", 3) if hasattr(args, "max_depth") else 3
+        max_depth = args.max_depth
 
         if current_depth >= max_depth:
             return ""
@@ -430,7 +389,10 @@ class ListFilesTool(
     # =============================================================================
 
     def _get_file_line_count(self, path: Path) -> int:
-        """Get the number of lines in a text file.
+        """Get the number of lines in a text file using streaming.
+
+        This method is memory-efficient as it reads the file line-by-line
+        instead of loading the entire content into memory.
 
         Args:
             path: Path to the file.
@@ -439,9 +401,9 @@ class ListFilesTool(
             Number of lines in the file.
         """
         try:
-            content = path.read_text(encoding="utf-8")
-            return len(content.split("\n"))
-        except (OSError, UnicodeDecodeError):
+            with path.open(mode="r", encoding="utf-8", errors="ignore") as f:
+                return sum(1 for _ in f)
+        except OSError:
             return 0
 
     def _format_file_size(self, size: int) -> str:

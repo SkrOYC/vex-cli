@@ -20,9 +20,7 @@ Tests cover all acceptance criteria including:
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
-import tempfile
 
 from pydantic import ValidationError
 import pytest
@@ -31,45 +29,11 @@ from vibe.core.tools.filesystem.list_files import (
     ListFilesArgs,
     ListFilesResult,
     ListFilesTool,
-    ListFilesToolConfig,
-    ListFilesToolState,
 )
 from vibe.core.tools.filesystem.types import FileSystemError
 
 # Mark all async tests
 pytestmark = pytest.mark.asyncio
-
-
-# =============================================================================
-# Fixtures
-# =============================================================================
-
-
-@pytest.fixture
-def temp_dir() -> Iterator[Path]:
-    """Create a temporary directory for file operations."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
-
-
-@pytest.fixture
-def tool_config(temp_dir: Path) -> ListFilesToolConfig:
-    """Create a ListFilesToolConfig."""
-    return ListFilesToolConfig(workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_state() -> ListFilesToolState:
-    """Create a fresh ListFilesToolState for each test."""
-    return ListFilesToolState()
-
-
-@pytest.fixture
-def tool(
-    tool_config: ListFilesToolConfig, tool_state: ListFilesToolState
-) -> ListFilesTool:
-    """Create a ListFilesTool instance for testing."""
-    return ListFilesTool(config=tool_config, state=tool_state)
 
 
 # =============================================================================
