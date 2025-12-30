@@ -49,6 +49,7 @@ dependencies = [
     "langchain-mcp-adapters>=0.2.0",
     "pyperclip>=1.11.0",
     "textual-speedups>=0.2.1",
+    "pytest-cov>=7.0.0",
 ]
 
 [project.urls]
