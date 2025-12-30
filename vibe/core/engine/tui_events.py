@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from vibe.core.tools.manager import ToolManager
 from vibe.core.types import AssistantEvent, BaseEvent, ToolCallEvent, ToolResultEvent
+from vibe.core.utils import logger
 
 if TYPE_CHECKING:
     from vibe.core.config import VibeConfig
@@ -127,16 +128,18 @@ class TUIEventMapper:
         tool_args = event_data.get("data", {}).get("input", {})
         tool_call_id = event_data.get("run_id", "")
 
-        # Get tool info for proper types
-        tool_class: type[BaseTool] | None
-        args_model: type[BaseModel] | None
-        tool_class, args_model = self._get_tool_info(tool_name)
+        tool_class = self._get_tool_class(tool_name)
 
-        if tool_class and args_model:
+        if tool_class:
+            args_model = tool_class._get_tool_args_results()[0]
             try:
                 args = args_model.model_validate(tool_args)
-            except Exception:
-                # Fallback to generic args if validation fails
+            except Exception as e:
+                logger.warning(
+                    "Failed to validate args for tool %s: %s. Falling back to generic args.",
+                    tool_name,
+                    e,
+                )
                 args = GenericArgs(args=tool_args)
         else:
             # Fallback for unknown tools
@@ -166,17 +169,19 @@ class TUIEventMapper:
         tool_result = event_data.get("data", {}).get("output", "")
         tool_call_id = event_data.get("run_id", "")
 
-        tool_class: type[BaseTool] | None
-        result_model: type[BaseModel] | None
-        tool_class, result_model = self._get_tool_info(tool_name)
+        tool_class = self._get_tool_class(tool_name)
 
         if tool_class:
             # Get result model from the second element of _get_tool_args_results
             _, result_model = tool_class._get_tool_args_results()
             try:
                 result = result_model.model_validate({"output": tool_result})
-            except Exception:
-                # Fallback to generic result if validation fails
+            except Exception as e:
+                logger.warning(
+                    "Failed to validate result for tool %s: %s. Falling back to generic result.",
+                    tool_name,
+                    e,
+                )
                 result = GenericResult(output=str(tool_result))
         else:
             # Fallback for unknown tools
@@ -189,21 +194,18 @@ class TUIEventMapper:
             tool_call_id=tool_call_id,
         )
 
-    def _get_tool_info(
-        self, tool_name: str
-    ) -> tuple[type[BaseTool] | None, type[BaseModel] | None]:
-        """Get tool class and args model for a tool name.
+    def _get_tool_class(self, tool_name: str) -> type[BaseTool] | None:
+        """Get tool class for a tool name.
 
         Args:
             tool_name: The name of the tool to look up
 
         Returns:
-            Tuple of (tool_class, args_model) or (None, None) if not found
+            The tool class, or None if not found.
         """
         try:
             tool_instance = self.tool_manager.get(tool_name)
-            tool_class = tool_instance.__class__
-            args_model = tool_class._get_tool_args_results()[0]
-            return tool_class, args_model
-        except Exception:
-            return None, None
+            return tool_instance.__class__
+        except Exception as e:
+            logger.debug("Could not get tool class for '%s': %s", tool_name, e)
+            return None

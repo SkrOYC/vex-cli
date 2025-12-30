@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from enum import StrEnum, auto
 import subprocess
-from typing import Any, ClassVar, Iterator, assert_never, AsyncIterator
+from typing import Any, ClassVar, assert_never, AsyncIterator
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType

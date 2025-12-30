@@ -6,7 +6,7 @@ approval dialogs.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock
 
 from vibe.core.config import VibeConfig
 from vibe.core.engine.langchain_engine import VibeLangChainEngine, VibeEngineStats
