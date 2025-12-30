@@ -6,14 +6,13 @@ and meet the migration requirements from issues #38, #39, and #40.
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from langchain_core.messages import AIMessage
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
 
 from vibe.core.config import VibeConfig
-from vibe.core.engine.langchain_engine import VibeLangChainEngine, VibeEngineStats
+from vibe.core.engine.langchain_engine import VibeEngineStats, VibeLangChainEngine
 from vibe.core.engine.langchain_middleware import (
     ContextWarningMiddleware,
     PriceLimitMiddleware,
@@ -314,6 +313,7 @@ class TestNativeHITLMiddleware:
     def test_hitl_included_in_middleware_stack(self):
         """Test that HITL middleware is included when tools require approval."""
         from langchain.agents.middleware import HumanInTheLoopMiddleware
+
         from vibe.core.tools.base import BaseToolConfig, ToolPermission
 
         config = VibeConfig(active_model="test-model", use_langchain=True)
@@ -356,8 +356,9 @@ class TestVibeAgentStateSchema:
 
     def test_state_inherits_from_base(self):
         """Test VibeAgentState inherits from base AgentState."""
-        from langchain.agents.middleware.types import AgentState as BaseAgentState
         from typing import get_type_hints
+
+        from langchain.agents.middleware.types import AgentState as BaseAgentState
 
         base_hints = get_type_hints(BaseAgentState)
         vibe_hints = get_type_hints(VibeAgentState)
@@ -432,8 +433,9 @@ class TestToolAdapterCompatibility:
     def test_adapter_produces_langchain_tools(self):
         """Test that VibeToolAdapter produces LangChain-compatible tools."""
         from langchain_core.tools import BaseTool
-        from vibe.core.engine.tools import VibeToolAdapter
+
         from vibe.core.config import VibeConfig
+        from vibe.core.engine.tools import VibeToolAdapter
 
         config = VibeConfig(active_model="test-model", use_langchain=True)
 
@@ -447,8 +449,8 @@ class TestToolAdapterCompatibility:
 
     def test_bash_tool_included(self):
         """Test that bash tool is available."""
-        from vibe.core.engine.tools import VibeToolAdapter
         from vibe.core.config import VibeConfig
+        from vibe.core.engine.tools import VibeToolAdapter
 
         config = VibeConfig(active_model="test-model", use_langchain=True)
 

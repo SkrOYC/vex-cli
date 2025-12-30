@@ -6,16 +6,10 @@ works correctly with streaming, tools, approvals, and state management.
 
 from __future__ import annotations
 
-import asyncio
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
 
 from vibe.core.config import VibeConfig
 from vibe.core.engine.langchain_engine import VibeLangChainEngine
-from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
 
 
 class TestLangChainIntegration:
@@ -74,11 +68,6 @@ class TestLangChainIntegration:
         middleware = engine._build_middleware_stack()
 
         # Should have ContextWarningMiddleware, PriceLimitMiddleware, and HumanInTheLoopMiddleware
-        from vibe.core.engine.langchain_middleware import (
-            ContextWarningMiddleware,
-            PriceLimitMiddleware,
-        )
-        from langchain.agents.middleware import HumanInTheLoopMiddleware
 
         middleware_types = [type(m).__name__ for m in middleware]
 
@@ -267,6 +256,7 @@ class TestLangChainToolAdapter:
     def test_tool_adapter_get_all_tools(self, config: VibeConfig):
         """Test that VibeToolAdapter.get_all_tools works with LangChain config."""
         from langchain_core.tools import BaseTool
+
         from vibe.core.engine.tools import VibeToolAdapter
 
         tools = VibeToolAdapter.get_all_tools(config)

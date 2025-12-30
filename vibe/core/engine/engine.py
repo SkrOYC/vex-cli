@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
-import os
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
-from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
@@ -19,8 +16,7 @@ from vibe.core.engine.adapters import ApprovalBridge, EventTranslator
 from vibe.core.engine.middleware import build_middleware_stack
 from vibe.core.engine.models import create_model_from_config
 from vibe.core.engine.tools import VibeToolAdapter
-from vibe.core.interaction_logger import InteractionLogger
-from vibe.core.types import AgentStatsProtocol, BaseEvent, LLMMessage, ToolResultEvent
+from vibe.core.types import BaseEvent, LLMMessage, ToolResultEvent
 
 
 class VibeEngineStats:
@@ -28,7 +24,7 @@ class VibeEngineStats:
 
     def __init__(
         self, messages: int = 0, context_tokens: int = 0, todos: list[Any] | None = None
-    ):
+    ) -> None:
         self._messages = messages
         self._todos = todos or []
         self.steps = 0  # VibeEngine doesn't track steps like legacy agent
@@ -75,7 +71,8 @@ class VibeEngine:
     def __init__(
         self,
         config: VibeConfig,
-        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+        | None = None,
         initial_messages: list[LLMMessage] | None = None,
     ) -> None:
         self.config = config
@@ -104,8 +101,7 @@ class VibeEngine:
     def _create_approval_bridge(self) -> ApprovalBridge:
         """Create ApprovalBridge with proper configuration and callback."""
         return ApprovalBridge(
-            config=self.config,
-            approval_callback=self.approval_callback
+            config=self.config, approval_callback=self.approval_callback
         )
 
     def _create_model(self) -> Any:
@@ -159,7 +155,7 @@ class VibeEngine:
             checkpointer=self._checkpointer,
         )
 
-    async def run(self, user_message: str) -> AsyncGenerator["BaseEvent", None]:
+    async def run(self, user_message: str) -> AsyncGenerator[BaseEvent, None]:
         """Run a conversation turn, yielding events for the TUI."""
         if self._agent is None:
             self.initialize()
@@ -218,7 +214,7 @@ class VibeEngine:
         try:
             # Resume the agent execution from the interrupt point
             self._agent.invoke(None, config)  # type: ignore
-        except Exception as e:
+        except Exception:
             # Handle resume errors gracefully
             # In a production system, you might want to log this error
             pass
@@ -246,7 +242,7 @@ class VibeEngine:
                 {"messages": [rejection_message]},
                 as_node="human",  # Update as if from human node
             )
-        except Exception as e:
+        except Exception:
             # Handle reject errors gracefully
             # In a production system, you might want to log this error
             pass
@@ -318,7 +314,7 @@ class VibeEngine:
         return self._thread_id
 
     @property
-    def stats(self) -> "VibeEngineStats":
+    def stats(self) -> VibeEngineStats:
         """Get current session statistics."""
         # Use the persistent stats object and update context-related values
         if self._agent is not None:
@@ -360,24 +356,34 @@ class VibeEngine:
                 # Add both input and output tokens if available
                 total_tokens += usage.get("input_tokens", 0)
                 total_tokens += usage.get("output_tokens", 0)
+                continue
+
             # If no usage metadata, fall back to character-based estimation
-            elif hasattr(msg, "content"):
-                content = msg.content
-                if isinstance(content, list):
-                    # Handle list of content parts
-                    for part in content:
-                        if hasattr(part, "text"):
-                            total_tokens += len(str(getattr(part, "text", ""))) // 4
-                        elif isinstance(part, str):
-                            total_tokens += len(part) // 4
-                        else:
-                            total_tokens += len(str(part)) // 4
-                else:
-                    total_tokens += len(str(content)) // 4
+            if not hasattr(msg, "content"):
+                continue
+
+            content = msg.content
+            if isinstance(content, list):
+                # Handle list of content parts
+                total_tokens += self._estimate_tokens_from_parts(content)
+            else:
+                total_tokens += len(str(content)) // 4
 
         return total_tokens
 
-    def _update_token_stats_from_event(self, event) -> None:
+    def _estimate_tokens_from_parts(self, content_parts: list) -> int:
+        """Estimate tokens from a list of content parts."""
+        total_tokens = 0
+        for part in content_parts:
+            if hasattr(part, "text"):
+                total_tokens += len(str(getattr(part, "text", ""))) // 4
+            elif isinstance(part, str):
+                total_tokens += len(part) // 4
+            else:
+                total_tokens += len(str(part)) // 4
+        return total_tokens
+
+    def _update_token_stats_from_event(self, event: Any) -> None:
         """Update token statistics from event (can be dict or StreamEvent object)."""
         # Handle both dict and StreamEvent objects
         if not isinstance(event, dict):

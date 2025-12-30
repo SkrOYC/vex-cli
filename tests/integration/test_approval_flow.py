@@ -1,12 +1,14 @@
 """Integration tests for approval flow with DeepAgents."""
 
-import asyncio
-import pytest
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from vibe.core.config import VibeConfig
 from vibe.core.engine import VibeEngine
 from vibe.core.engine.adapters import ApprovalBridge
-from vibe.core.types import LLMMessage, Role
 
 
 class TestApprovalFlow:
@@ -154,7 +156,7 @@ class TestApprovalFlow:
         from vibe.core.types import InterruptEvent
 
         config = VibeConfig()
-        engine = VibeEngine(config=config)
+        VibeEngine(config=config)
 
         # Mock event handler with interrupt callback
         interrupt_calls = []
@@ -178,7 +180,7 @@ class TestApprovalFlow:
         interrupt_event = InterruptEvent(interrupt_data={"test": "data"})
 
         # Call handle_event
-        result = await mock_handler.handle_event(interrupt_event)
+        await mock_handler.handle_event(interrupt_event)
 
         # Should call interrupt callback
         assert len(interrupt_calls) == 1
@@ -250,12 +252,12 @@ class TestApprovalFlow:
     async def test_approval_bridge_basic_functionality(self):
         """Test basic ApprovalBridge functionality."""
         from vibe.core.config import VibeConfig
-    
+
         config = VibeConfig()
-        
+
         # Test with no callback (auto-approve mode)
         bridge = ApprovalBridge(config=config)
-        
+
         interrupt = {
             "data": {
                 "action_request": {
@@ -265,7 +267,7 @@ class TestApprovalFlow:
                 }
             }
         }
-        
+
         result = await bridge.handle_interrupt(interrupt)
         assert result["approved"] is True
         assert "no approval callback" in result["feedback"]
@@ -280,7 +282,7 @@ class TestApprovalFlow:
         from vibe.core.tools.base import BaseToolConfig, ToolPermission
 
         config = VibeConfig()
-        
+
         # Set up tool with allowlist pattern
         write_config = BaseToolConfig()
         write_config.permission = ToolPermission.ASK
@@ -320,8 +322,6 @@ class TestApprovalFlow:
         assert result["approved"] is False
         assert "denylist" in result["feedback"]
 
-
-
     @pytest.mark.asyncio
     async def test_vibeengine_with_approval_callback(self):
         """Test VibeEngine with approval callback integration."""
@@ -332,7 +332,7 @@ class TestApprovalFlow:
 
         # Mock approval callback
         approval_decisions = []
-        
+
         async def mock_callback(action_request):
             decision = {"approved": True, "always_approve": False, "feedback": None}
             approval_decisions.append(decision)
@@ -351,10 +351,10 @@ class TestApprovalFlow:
         from vibe.core.engine.adapters import ApprovalBridge
 
         config = VibeConfig()
-        
+
         # Create mock approval bridge
         approval_results = []
-        
+
         async def mock_callback(action_request):
             result = {"approved": True, "always_approve": False, "feedback": None}
             approval_results.append(result)
@@ -374,7 +374,7 @@ class TestApprovalFlow:
         }
 
         result = await bridge.handle_interrupt(interrupt)
-        
+
         assert result["approved"] is True
         assert len(approval_results) == 1
         assert approval_results[0]["approved"] is True
@@ -382,18 +382,19 @@ class TestApprovalFlow:
 
 class TestLangChainNativeHITL:
     """Integration tests for native LangChain 1.2.0 Human-in-the-Loop middleware.
-    
+
     These tests verify that the native HumanInTheLoopMiddleware replaces
     the ApprovalBridge adapter when using LangChain 1.2.0.
-    
+
     See issue #39 for details.
     """
 
     @pytest.mark.asyncio
     async def test_vibelangchainengine_has_native_hitl_middleware(self):
         """Test that VibeLangChainEngine uses native HumanInTheLoopMiddleware."""
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
         from langchain.agents.middleware import HumanInTheLoopMiddleware
+
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         # Create config with permissions that require approval
         config = VibeConfig()
@@ -407,12 +408,16 @@ class TestLangChainNativeHITL:
         config.tools["bash"] = bash_config
 
         engine = VibeLangChainEngine(config=config)
-        
+
         # Verify the middleware stack contains HumanInTheLoopMiddleware
         middleware_stack = engine._build_middleware_stack()
-        hitl_middleware = [m for m in middleware_stack if isinstance(m, HumanInTheLoopMiddleware)]
-        
-        assert len(hitl_middleware) == 1, "HumanInTheLoopMiddleware should be in the stack"
+        hitl_middleware = [
+            m for m in middleware_stack if isinstance(m, HumanInTheLoopMiddleware)
+        ]
+
+        assert len(hitl_middleware) == 1, (
+            "HumanInTheLoopMiddleware should be in the stack"
+        )
         assert hitl_middleware[0].interrupt_on is not None
 
     @pytest.mark.asyncio
@@ -424,16 +429,17 @@ class TestLangChainNativeHITL:
         config.use_langchain = True
 
         engine = VibeLangChainEngine(config=config)
-        
+
         # VibeLangChainEngine should not have an approval_bridge attribute
         # (unlike the DeepAgents VibeEngine)
-        assert not hasattr(engine, 'approval_bridge') or engine.approval_bridge is None
+        assert not hasattr(engine, "approval_bridge") or engine.approval_bridge is None
 
     @pytest.mark.asyncio
     async def test_middleware_stack_order_for_hitl(self):
         """Test that HITL middleware is last in the stack (after context/price)."""
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
         from langchain.agents.middleware import HumanInTheLoopMiddleware
+
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
         from vibe.core.engine.langchain_middleware import (
             ContextWarningMiddleware,
             PriceLimitMiddleware,
@@ -453,19 +459,25 @@ class TestLangChainNativeHITL:
 
         engine = VibeLangChainEngine(config=config)
         middleware_stack = engine._build_middleware_stack()
-        
+
         # HITL should be last
         assert isinstance(middleware_stack[-1], HumanInTheLoopMiddleware)
-        
+
         # Context and price middleware should come before HITL
-        context_middleware = [m for m in middleware_stack if isinstance(m, ContextWarningMiddleware)]
-        price_middleware = [m for m in middleware_stack if isinstance(m, PriceLimitMiddleware)]
-        
+        context_middleware = [
+            m for m in middleware_stack if isinstance(m, ContextWarningMiddleware)
+        ]
+        price_middleware = [
+            m for m in middleware_stack if isinstance(m, PriceLimitMiddleware)
+        ]
+
         if context_middleware:
             context_idx = middleware_stack.index(context_middleware[0])
             hitl_idx = middleware_stack.index(middleware_stack[-1])
-            assert context_idx < hitl_idx, "ContextWarningMiddleware should be before HITL"
-        
+            assert context_idx < hitl_idx, (
+                "ContextWarningMiddleware should be before HITL"
+            )
+
         if price_middleware:
             price_idx = middleware_stack.index(price_middleware[0])
             hitl_idx = middleware_stack.index(middleware_stack[-1])
@@ -493,18 +505,22 @@ class TestLangChainNativeHITL:
 
         # Build interrupt config
         interrupt_on = build_interrupt_config(config)
-        
+
         # write_file should require approval
         assert "write_file" in interrupt_on
         # read_file should auto-approve (not in interrupt_on)
         assert "read_file" not in interrupt_on
-        
+
         engine = VibeLangChainEngine(config=config)
         middleware_stack = engine._build_middleware_stack()
-        
+
         # Find HITL middleware and verify it has the correct config
         from langchain.agents.middleware import HumanInTheLoopMiddleware
-        hitl = next((m for m in middleware_stack if isinstance(m, HumanInTheLoopMiddleware)), None)
+
+        hitl = next(
+            (m for m in middleware_stack if isinstance(m, HumanInTheLoopMiddleware)),
+            None,
+        )
         assert hitl is not None
         # The middleware may transform the config, but write_file should still require approval
         assert "write_file" in hitl.interrupt_on
@@ -512,12 +528,13 @@ class TestLangChainNativeHITL:
     @pytest.mark.asyncio
     async def test_langchain_engine_with_no_approvals_configured(self):
         """Test middleware stack when no custom tools require approval.
-        
+
         Note: Even with no custom approvals, dangerous tools (bash, write_file, etc.)
         are always added to interrupt_on by build_interrupt_config() for security.
         """
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
         from langchain.agents.middleware import HumanInTheLoopMiddleware
+
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         config = VibeConfig()
         config.use_langchain = True
@@ -531,15 +548,17 @@ class TestLangChainNativeHITL:
 
         engine = VibeLangChainEngine(config=config)
         middleware_stack = engine._build_middleware_stack()
-        
+
         # HITL middleware should still be in the stack because dangerous tools
         # (bash, write_file, etc.) are always added by build_interrupt_config
         from vibe.core.engine.permissions import build_interrupt_config
+
         interrupt_on = build_interrupt_config(config)
-        
+
         # Dangerous tools are always in interrupt_on
         assert len(interrupt_on) > 0, "Dangerous tools should always require approval"
-        
-        hitl_middleware = [m for m in middleware_stack if isinstance(m, HumanInTheLoopMiddleware)]
-        assert len(hitl_middleware) == 1, "HITL should be added for dangerous tools"
 
+        hitl_middleware = [
+            m for m in middleware_stack if isinstance(m, HumanInTheLoopMiddleware)
+        ]
+        assert len(hitl_middleware) == 1, "HITL should be added for dangerous tools"

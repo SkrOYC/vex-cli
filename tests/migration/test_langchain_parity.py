@@ -10,11 +10,11 @@ See issue #41 for details.
 from __future__ import annotations
 
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from vibe.core.config import VibeConfig, ModelConfig, ProviderConfig, Backend
+from vibe.core.config import Backend, ModelConfig, ProviderConfig, VibeConfig
 from vibe.core.tools.base import BaseToolConfig, ToolPermission
 
 
@@ -107,8 +107,8 @@ class TestLangChainParity:
 
     def test_same_engine_interface(self):
         """Test that both engines implement the same interface."""
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
         from vibe.core.engine import VibeEngine
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         # Both should have these methods
         langchain_methods = [
@@ -137,10 +137,11 @@ class TestLangChainParity:
 
     def test_same_state_schema(self):
         """Test that both engines use compatible state schemas."""
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
-        from vibe.core.engine.state import VibeAgentState
-        from langchain.agents.middleware.types import AgentState as BaseAgentState
         from typing import get_type_hints
+
+        from langchain.agents.middleware.types import AgentState as BaseAgentState
+
+        from vibe.core.engine.state import VibeAgentState
 
         # VibeAgentState should inherit from base AgentState
         base_hints = get_type_hints(BaseAgentState)
@@ -158,8 +159,8 @@ class TestLangChainParity:
 
     def test_same_pricing_config_structure(self, monkeypatch):
         """Test that pricing configuration structure is compatible."""
+        from vibe.core.config import VibeConfig
         from vibe.core.engine.langchain_engine import VibeLangChainEngine
-        from vibe.core.config import VibeConfig, ModelConfig, ProviderConfig, Backend
 
         # Mock the API key to avoid MissingAPIKeyError
         monkeypatch.setenv("OPENAI_API_KEY", "mock-test-key")
@@ -201,12 +202,9 @@ class TestLangChainParity:
 
     def test_same_middleware_stack_structure(self, langchain_config: VibeConfig):
         """Test that middleware stack has the same structure."""
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
-        from vibe.core.engine.langchain_middleware import (
-            ContextWarningMiddleware,
-            PriceLimitMiddleware,
-        )
         from langchain.agents.middleware import HumanInTheLoopMiddleware
+
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         # Test with all middleware enabled
         langchain_config.context_warnings = True
@@ -227,9 +225,8 @@ class TestLangChainParity:
 
     def test_same_interrupt_config_building(self):
         """Test that interrupt config is built the same way."""
-        from vibe.core.engine.permissions import build_interrupt_config
-        from vibe.core.tools.base import BaseToolConfig, ToolPermission
         from vibe.core.config import VibeConfig
+        from vibe.core.engine.permissions import build_interrupt_config
 
         # Test config
         config = VibeConfig()
@@ -260,8 +257,8 @@ class TestLangChainTokenAccuracy:
 
     def test_uses_usage_metadata_not_estimation(self):
         """Test that actual usage_metadata is used, not estimation."""
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
         from vibe.core.config import VibeConfig
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         config = VibeConfig(active_model="test-model", use_langchain=True)
 
@@ -301,8 +298,8 @@ class TestLangChainTokenAccuracy:
         This is important because estimation can be inaccurate.
         The method should only count tokens from actual usage_metadata.
         """
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
         from vibe.core.config import VibeConfig
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         config = VibeConfig(active_model="test-model", use_langchain=True)
 
@@ -323,8 +320,9 @@ class TestLangChainApprovalParity:
     def test_approval_callback_signature_compatibility(self):
         """Test that approval callback has compatible signature."""
         import inspect
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
+
         from vibe.core.engine import VibeEngine
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         # Both should accept approval_callback parameter
         langchain_sig = inspect.signature(VibeLangChainEngine.__init__)
@@ -336,8 +334,9 @@ class TestLangChainApprovalParity:
     def test_handle_approval_signature_compatibility(self):
         """Test that handle_approval has compatible signature."""
         import inspect
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
+
         from vibe.core.engine import VibeEngine
+        from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
         langchain_sig = inspect.signature(VibeLangChainEngine.handle_approval)
         deepagents_sig = inspect.signature(VibeEngine.handle_approval)
@@ -360,8 +359,9 @@ class TestLangChainErrorHandlingParity:
 
     def test_price_limit_error_message_format(self):
         """Test that price limit errors have consistent format."""
-        from vibe.core.engine.langchain_middleware import PriceLimitMiddleware
         from langchain_core.messages import AIMessage
+
+        from vibe.core.engine.langchain_middleware import PriceLimitMiddleware
 
         pricing = {"test-model": (0.001, 0.002)}  # $1/$2 per 1k tokens
         middleware = PriceLimitMiddleware(
@@ -390,9 +390,11 @@ class TestLangChainMiddlewareBehavior:
 
     def test_context_warning_only_warns_once(self):
         """Test that context warning is only shown once per session."""
-        from vibe.core.engine.langchain_middleware import ContextWarningMiddleware
-        from langgraph.runtime import Runtime
         from typing import cast
+
+        from langgraph.runtime import Runtime
+
+        from vibe.core.engine.langchain_middleware import ContextWarningMiddleware
 
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
 
@@ -420,10 +422,12 @@ class TestLangChainMiddlewareBehavior:
 
     def test_context_warning_uses_actual_tokens_first(self):
         """Test that context warning prefers usage_metadata over estimation."""
-        from vibe.core.engine.langchain_middleware import ContextWarningMiddleware
+        from typing import cast
+
         from langchain_core.messages import AIMessage
         from langgraph.runtime import Runtime
-        from typing import cast
+
+        from vibe.core.engine.langchain_middleware import ContextWarningMiddleware
 
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
 
@@ -449,10 +453,12 @@ class TestLangChainMiddlewareBehavior:
 
     def test_price_limit_accumulates_cost(self):
         """Test that price limit middleware accumulates cost across calls."""
-        from vibe.core.engine.langchain_middleware import PriceLimitMiddleware
+        from typing import cast
+
         from langchain_core.messages import AIMessage
         from langgraph.runtime import Runtime
-        from typing import cast
+
+        from vibe.core.engine.langchain_middleware import PriceLimitMiddleware
 
         # Use very low rates to make calculations work out correctly
         # $0.05 per 1M tokens = $0.00000005 per token

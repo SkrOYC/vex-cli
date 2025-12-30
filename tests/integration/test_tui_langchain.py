@@ -5,11 +5,14 @@ through TUIEventMapper and handles the complete event flow including
 approval dialogs.
 """
 
-import pytest
+from __future__ import annotations
+
 from unittest.mock import Mock
 
+import pytest
+
 from vibe.core.config import VibeConfig
-from vibe.core.engine.langchain_engine import VibeLangChainEngine, VibeEngineStats
+from vibe.core.engine.langchain_engine import VibeEngineStats, VibeLangChainEngine
 from vibe.core.engine.tui_events import TUIEventMapper
 from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
 
@@ -218,15 +221,16 @@ class TestDeprecationWarnings:
     def test_event_translator_deprecation_warning(self):
         """Test that EventTranslator emits deprecation warning."""
         import warnings
-        from vibe.core.engine.adapters import EventTranslator
+
         from vibe.core.config import VibeConfig
+        from vibe.core.engine.adapters import EventTranslator
 
         config = VibeConfig()
         config.use_langchain = True
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            translator = EventTranslator(config)
+            EventTranslator(config)
 
             assert len(w) >= 1
             assert any(
@@ -236,15 +240,16 @@ class TestDeprecationWarnings:
     def test_approval_bridge_deprecation_warning(self):
         """Test that ApprovalBridge emits deprecation warning."""
         import warnings
-        from vibe.core.engine.adapters import ApprovalBridge
+
         from vibe.core.config import VibeConfig
+        from vibe.core.engine.adapters import ApprovalBridge
 
         config = VibeConfig()
         config.use_langchain = True
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            bridge = ApprovalBridge(config)
+            ApprovalBridge(config)
 
             assert len(w) >= 1
             assert any(

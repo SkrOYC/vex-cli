@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from enum import StrEnum, auto
 import subprocess
-from typing import Any, ClassVar, assert_never, AsyncIterator
+from typing import Any, ClassVar, assert_never
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
@@ -44,16 +45,15 @@ from vibe.cli.update_notifier import (
 )
 from vibe.core import __version__ as CORE_VERSION
 from vibe.core.agent import Agent
-from vibe.core.engine import VibeEngine
-from vibe.core.engine.langchain_engine import VibeLangChainEngine
 from vibe.core.autocompletion.path_prompt_adapter import render_path_prompt
 from vibe.core.config import VibeConfig
 from vibe.core.config_path import HISTORY_FILE
+from vibe.core.engine import VibeEngine
+from vibe.core.engine.langchain_engine import VibeLangChainEngine
 from vibe.core.tools.base import BaseToolConfig, ToolPermission
 from vibe.core.types import (
     ApprovalResponse,
     BaseEvent,
-    InterruptEvent,
     LLMMessage,
     ResumeSessionInfo,
     Role,
@@ -243,7 +243,7 @@ class VibeApp(App):
             self._current_request_id = None
         elif isinstance(self.agent, VibeLangChainEngine):
             # Native LangChain 1.2.0 flow - use Command(resume=...)
-            await self.agent.handle_approval(approved=True, feedback=None)
+            await self.agent.handle_approval(True)  # type: ignore[arg-type]
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
@@ -263,7 +263,7 @@ class VibeApp(App):
             self._current_request_id = None
         elif isinstance(self.agent, VibeLangChainEngine):
             # Native LangChain 1.2.0 flow - use Command(resume=...)
-            await self.agent.handle_approval(approved=True, feedback=None)
+            await self.agent.handle_approval(True)  # type: ignore[arg-type]
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.YES, None))
@@ -283,7 +283,7 @@ class VibeApp(App):
             self._current_request_id = None
         elif isinstance(self.agent, VibeLangChainEngine):
             # Native LangChain 1.2.0 flow
-            await self.agent.handle_approval(approved=False, feedback=feedback)
+            await self.agent.handle_approval(False, feedback)  # type: ignore[arg-type]  # type: ignore[arg-type]
         elif self._pending_approval and not self._pending_approval.done():
             # Legacy agent flow
             self._pending_approval.set_result((ApprovalResponse.NO, feedback))
@@ -776,7 +776,7 @@ class VibeApp(App):
 
         try:
             log_path = (
-                self.agent.get_log_path()
+                getattr(self.agent, "get_log_path", lambda: None)()
                 if hasattr(self.agent, "get_log_path")
                 else None
             )
@@ -917,7 +917,7 @@ class VibeApp(App):
         try:
             result = await self._pending_approval
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return {
                 "approved": False,
                 "always_approve": False,

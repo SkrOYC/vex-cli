@@ -13,7 +13,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from langchain.agents.middleware.types import AgentMiddleware, AgentState
-
 from langchain_core.messages import AIMessage
 
 if TYPE_CHECKING:
@@ -22,28 +21,26 @@ if TYPE_CHECKING:
 
 class ContextWarningMiddleware(AgentMiddleware):
     """Warn user when context usage reaches threshold.
-    
+
     This middleware checks the current token count before each model call
     and injects a warning message into the state when usage exceeds
     the configured threshold percentage of max_context.
-    
+
     Token counts are obtained from AIMessage.usage_metadata when available,
     falling back to character-based estimation if not present.
-    
+
     Example:
         middleware = ContextWarningMiddleware(
             threshold_percent=0.5,  # Warn at 50%
             max_context=100000,      # 100K token max context
         )
     """
-    
+
     def __init__(
-        self,
-        threshold_percent: float = 0.5,
-        max_context: int | None = None,
+        self, threshold_percent: float = 0.5, max_context: int | None = None
     ) -> None:
         """Initialize the context warning middleware.
-        
+
         Args:
             threshold_percent: Percentage of max_context at which to warn (0.0-1.0)
             max_context: Maximum context window size in tokens
@@ -56,11 +53,11 @@ class ContextWarningMiddleware(AgentMiddleware):
         self, state: AgentState, runtime: Runtime
     ) -> dict[str, Any] | None:
         """Check context usage before model call and inject warning if needed.
-        
+
         Args:
             state: Current agent state containing messages
             runtime: Runtime context for the middleware
-            
+
         Returns:
             dict with "warning" key if threshold exceeded, None otherwise
         """
@@ -83,10 +80,10 @@ class ContextWarningMiddleware(AgentMiddleware):
 
     def _get_current_token_count(self, state: AgentState) -> int:
         """Get current token count from usage metadata or estimate from messages.
-        
+
         Args:
             state: Current agent state containing messages
-            
+
         Returns:
             Token count from usage_metadata or estimated count
         """
@@ -104,12 +101,12 @@ class ContextWarningMiddleware(AgentMiddleware):
 
     def _estimate_tokens(self, messages: list) -> int:
         """Rough token estimation: ~4 characters per token.
-        
+
         This is a fallback when usage_metadata is not available.
-        
+
         Args:
             messages: List of messages to estimate
-            
+
         Returns:
             Estimated token count
         """
@@ -131,11 +128,11 @@ class ContextWarningMiddleware(AgentMiddleware):
 
     def _create_warning(self, current_tokens: int, max_tokens: int) -> str:
         """Create a formatted warning message.
-        
+
         Args:
             current_tokens: Current token count
             max_tokens: Maximum allowed tokens
-            
+
         Returns:
             Formatted warning message string
         """
@@ -148,13 +145,13 @@ class ContextWarningMiddleware(AgentMiddleware):
 
 class PriceLimitMiddleware(AgentMiddleware):
     """Stop execution when price limit is exceeded.
-    
+
     This middleware tracks cumulative cost across model calls and raises
     a RuntimeError when the total exceeds the configured max_price.
-    
+
     Cost is calculated using actual token counts from usage_metadata
     multiplied by the per-token pricing rates.
-    
+
     Example:
         middleware = PriceLimitMiddleware(
             max_price=10.0,  # $10 limit
@@ -164,7 +161,7 @@ class PriceLimitMiddleware(AgentMiddleware):
             },
         )
     """
-    
+
     def __init__(
         self,
         max_price: float,
@@ -172,7 +169,7 @@ class PriceLimitMiddleware(AgentMiddleware):
         pricing: dict[str, tuple[float, float]] | None = None,
     ) -> None:
         """Initialize the price limit middleware.
-        
+
         Args:
             max_price: Maximum total cost allowed in dollars
             model_name: The name of the model to use for pricing lookup
@@ -185,23 +182,21 @@ class PriceLimitMiddleware(AgentMiddleware):
         self._total_cost = 0.0
 
     def before_model(
-        self,
-        state: AgentState,
-        runtime: Runtime,
+        self, state: AgentState, runtime: Runtime
     ) -> dict[str, Any] | None:
         """No action needed before model call."""
         return None
 
     def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """Track cost after each model call and raise error if limit exceeded.
-        
+
         Args:
             state: Current agent state containing messages
             runtime: Runtime context for the middleware
-            
+
         Returns:
             None
-            
+
         Raises:
             RuntimeError: If cumulative cost exceeds max_price
         """

@@ -1,8 +1,9 @@
 """Tests for VibeToolAdapter."""
 
-import pytest
-from vibe.core.engine.tools import VibeToolAdapter
+from __future__ import annotations
+
 from vibe.core.config import VibeConfig
+from vibe.core.engine.tools import VibeToolAdapter
 
 
 class TestVibeToolAdapter:

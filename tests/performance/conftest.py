@@ -1,10 +1,13 @@
 """Shared fixtures for performance benchmarks."""
 
+from __future__ import annotations
+
 import json
-import pytest
 from pathlib import Path
 
-from vibe.core.config import VibeConfig, SessionLoggingConfig
+import pytest
+
+from vibe.core.config import SessionLoggingConfig, VibeConfig
 
 
 @pytest.fixture
@@ -46,5 +49,5 @@ def tool_scenarios():
 def load_fixture(filename: str) -> dict:
     """Load a JSON fixture file."""
     fixture_path = Path(__file__).parent / "fixtures" / filename
-    with open(fixture_path, "r") as f:
+    with open(fixture_path) as f:
         return json.load(f)

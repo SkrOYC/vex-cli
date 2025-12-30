@@ -1,18 +1,19 @@
 """Performance benchmark tests for Agent vs VibeEngine."""
 
-import asyncio
-import time
-import os
-import psutil
-from typing import AsyncGenerator
+from __future__ import annotations
 
+import asyncio
+import os
+import time
+
+import psutil
 import pytest
 
+from tests.mock.utils import mock_llm_chunk
+from tests.stubs.fake_backend import FakeBackend
 from vibe.core.agent import Agent
 from vibe.core.engine import VibeEngine
-from vibe.core.types import BaseEvent, AssistantEvent
-from tests.stubs.fake_backend import FakeBackend
-from tests.mock.utils import mock_llm_chunk
+from vibe.core.types import AssistantEvent
 
 
 @pytest.fixture

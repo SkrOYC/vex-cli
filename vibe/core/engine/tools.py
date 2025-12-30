@@ -4,13 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, Never
 
 from langchain_core.tools import BaseTool, StructuredTool
-from langchain.agents.middleware import TodoListMiddleware
 from langchain_mcp_adapters.client import MultiServerMCPClient
-
-from deepagents.middleware.filesystem import FilesystemMiddleware
-from deepagents.backends import StateBackend
 
 from vibe.core.config import VibeConfig
 
@@ -77,7 +74,7 @@ class VibeToolAdapter:
             except Exception as e:
                 return f"Error executing command: {e}"
 
-        def sync_execute_bash(*args, **kwargs):
+        def sync_execute_bash(*args: Any, **kwargs: Any) -> Never:
             raise NotImplementedError("Synchronous execution not supported")
 
         return StructuredTool.from_function(
@@ -94,7 +91,6 @@ class VibeToolAdapter:
     def _load_custom_tools(tool_path: str) -> list[BaseTool]:
         """Load custom tools from a file or directory."""
         from pathlib import Path
-        import importlib.util
 
         path = Path(tool_path)
 
@@ -154,10 +150,8 @@ class VibeToolAdapter:
         return tools
 
     @staticmethod
-    async def _load_mcp_tools_official(mcp_servers) -> list[BaseTool]:
+    async def _load_mcp_tools_official(mcp_servers: list[Any]) -> list[BaseTool]:
         """Load MCP tools using official LangChain MCP adapters."""
-        from langchain_mcp_adapters.client import MultiServerMCPClient
-
         connections = {}
         for server in mcp_servers:
             # Convert Vibe MCP config to langchain-mcp-adapters format
@@ -178,7 +172,7 @@ class VibeToolAdapter:
             return []
 
     @staticmethod
-    def _convert_vibe_mcp_config(vibe_server) -> dict:
+    def _convert_vibe_mcp_config(vibe_server: Any) -> dict:
         """Convert Vibe MCP server config to langchain-mcp-adapters format."""
         config = {"transport": vibe_server.transport}
 
@@ -186,7 +180,7 @@ class VibeToolAdapter:
             config["command"] = vibe_server.command
             if vibe_server.args:
                 config["args"] = vibe_server.args
-        elif vibe_server.transport in ("http", "streamable-http", "streamable_http"):
+        elif vibe_server.transport in {"http", "streamable-http", "streamable_http"}:
             config["url"] = vibe_server.url
             if hasattr(vibe_server, "headers") and vibe_server.headers:
                 config["headers"] = vibe_server.headers

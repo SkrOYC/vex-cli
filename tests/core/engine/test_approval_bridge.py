@@ -1,11 +1,11 @@
 """Tests for ApprovalBridge."""
 
-import asyncio
+from __future__ import annotations
 
 import pytest
+
 from vibe.core.config import VibeConfig
 from vibe.core.engine.adapters import ApprovalBridge
-from vibe.core.tools.base import BaseToolConfig, ToolPermission
 
 
 class TestApprovalBridge:
@@ -13,10 +13,10 @@ class TestApprovalBridge:
     async def test_handle_interrupt_with_callback(self):
         """Test handling of interrupts with callback."""
         config = VibeConfig()
-        
+
         # Mock approval callback
         callback_results = []
-        
+
         async def mock_callback(action_request):
             result = {"approved": True, "always_approve": False, "feedback": None}
             callback_results.append(result)
@@ -34,7 +34,7 @@ class TestApprovalBridge:
         }
 
         result = await bridge.handle_interrupt(interrupt)
-        
+
         assert result["approved"] is True
         assert len(callback_results) == 1
 
@@ -54,7 +54,7 @@ class TestApprovalBridge:
         }
 
         result = await bridge.handle_interrupt(interrupt)
-        
+
         assert result["approved"] is True
         assert "no approval callback" in result["feedback"]
 
@@ -70,13 +70,13 @@ class TestApprovalBridge:
     async def test_session_auto_approve_functionality(self):
         """Test session-wide auto-approval tracking."""
         config = VibeConfig()
-    
+
         # Mock callback that always approves with "always" option
         async def mock_callback(action_request):
             return {"approved": True, "always_approve": True, "feedback": None}
-    
+
         bridge = ApprovalBridge(config=config, approval_callback=mock_callback)
-    
+
         interrupt = {
             "data": {
                 "action_request": {
@@ -86,7 +86,7 @@ class TestApprovalBridge:
                 }
             }
         }
-    
+
         # First call should add to session auto-approve
         result1 = await bridge.handle_interrupt(interrupt)
         assert result1["approved"] is True

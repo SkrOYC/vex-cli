@@ -1,13 +1,15 @@
 """Benchmark comparison script for Agent vs VibeEngine."""
 
+from __future__ import annotations
+
 import json
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 
-def run_benchmarks(output_file: str) -> Dict[str, Any]:
+def run_benchmarks(output_file: str) -> dict[str, Any]:
     """Run benchmarks and return results."""
     # Run pytest with benchmark
     result = subprocess.run(
@@ -29,12 +31,12 @@ def run_benchmarks(output_file: str) -> Dict[str, Any]:
         return {}
 
     # Load results
-    with open(output_file, "r") as f:
+    with open(output_file) as f:
         return json.load(f)
 
 
 def extract_benchmark_table(
-    agent_results: Dict[str, Any], vibe_results: Dict[str, Any] | None = None
+    agent_results: dict[str, Any], vibe_results: dict[str, Any] | None = None
 ) -> str:
     """Extract benchmark data from pytest-benchmark JSON structure."""
     if not agent_results.get("benchmarks"):
@@ -59,7 +61,7 @@ def extract_benchmark_table(
 
 
 def generate_html_report(
-    agent_results: Dict[str, Any], vibe_results: Dict[str, Any] | None = None
+    agent_results: dict[str, Any], vibe_results: dict[str, Any] | None = None
 ) -> str:
     """Generate HTML comparison report."""
     html = f"""

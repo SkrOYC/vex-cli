@@ -5,14 +5,15 @@ contains token estimation logic; token counting is handled by the engine using
 real API usage metadata.
 """
 
+from __future__ import annotations
+
 import os
 
+from langchain_core.language_models import BaseChatModel
 from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
 
-from vibe.core.config import VibeConfig, Backend
+from vibe.core.config import Backend, VibeConfig
 
 
 def create_model_from_config(config: VibeConfig) -> BaseChatModel:

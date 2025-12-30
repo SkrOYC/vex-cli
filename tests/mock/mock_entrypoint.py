@@ -47,10 +47,15 @@ def mock_llm_output() -> None:
     patches = [
         patch("langchain_mistralai.ChatMistralAI.ainvoke", side_effect=mock_complete),
         patch("langchain_openai.ChatOpenAI.ainvoke", side_effect=mock_complete),
-        patch("langchain_mistralai.ChatMistralAI.astream", side_effect=mock_complete_streaming),
-        patch("langchain_openai.ChatOpenAI.astream", side_effect=mock_complete_streaming),
+        patch(
+            "langchain_mistralai.ChatMistralAI.astream",
+            side_effect=mock_complete_streaming,
+        ),
+        patch(
+            "langchain_openai.ChatOpenAI.astream", side_effect=mock_complete_streaming
+        ),
     ]
-    
+
     # Start all patches
     for p in patches:
         p.start()

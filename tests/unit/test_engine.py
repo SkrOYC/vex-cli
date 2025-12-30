@@ -1,9 +1,9 @@
 """Unit tests for VibeEngine with DeepAgents integration."""
 
-import pytest
+from __future__ import annotations
+
 from vibe.core.config import VibeConfig
 from vibe.core.engine import VibeEngine
-from vibe.core.engine.adapters import ApprovalBridge
 from vibe.core.engine.engine import VibeEngineStats
 
 
@@ -21,9 +21,10 @@ class TestVibeEngine:
 
     def test_initialization_with_approval_bridge(self, deepagents_config: VibeConfig):
         """Test engine initializes with approval callback."""
+
         async def approval_callback(data):
             return {"approved": True, "feedback": None}
-        
+
         engine = VibeEngine(deepagents_config, approval_callback=approval_callback)
 
         # After initialization, approval_bridge should be created

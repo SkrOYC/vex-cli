@@ -5,25 +5,24 @@ from collections import OrderedDict
 from collections.abc import AsyncGenerator, Callable
 from enum import StrEnum, auto
 import time
-from typing import Any, cast
+from typing import Any, Never, cast
 from uuid import uuid4
+
+# The legacy backend factory has been removed as part of DeepAgents migration
+# Creating a compatibility layer to allow the system to work during transition
+import warnings
 
 from pydantic import BaseModel
 
 from vibe.core.config import VibeConfig
 from vibe.core.interaction_logger import InteractionLogger
 
-# The legacy backend factory has been removed as part of DeepAgents migration
-# Creating a compatibility layer to allow the system to work during transition
-import warnings
-from typing import Any, Callable
-
 
 class _BackendFactory:
     """Compatibility layer for legacy backend factory that acts like a dictionary."""
 
     def __getitem__(self, key: Any) -> Callable:
-        def backend_constructor(provider, timeout):
+        def backend_constructor(provider: Any, timeout: Any) -> Never:
             warnings.warn(
                 "The legacy backend system has been removed as part of DeepAgents migration. "
                 "Use VibeEngine instead of the legacy Agent system.",

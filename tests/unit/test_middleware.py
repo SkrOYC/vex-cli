@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import cast
 
-import pytest
-
 from langgraph.runtime import Runtime
+import pytest
 
 from vibe.core.config import VibeConfig
 from vibe.core.engine.middleware import (
@@ -168,7 +167,7 @@ class TestBuildMiddlewareStack:
 
     def test_builds_basic_stack(self):
         """Test that basic middleware stack is built correctly.
-        
+
         Note: Even with default config, HumanInTheLoopMiddleware is added
         because build_interrupt_config() always includes dangerous tools
         (bash, write_file, etc.) for security.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import tomli_w
@@ -11,7 +11,7 @@ import tomli_w
 # This allows filesystem tests to run without needing all ML dependencies
 try:
     from vibe.core import config_path
-    from vibe.core.config import VibeConfig, ModelConfig, ProviderConfig, Backend
+    from vibe.core.config import Backend, ModelConfig, ProviderConfig, VibeConfig
     from vibe.core.engine import VibeEngine
     from vibe.core.engine.adapters import EventTranslator
 

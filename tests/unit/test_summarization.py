@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 import warnings
+
+import pytest
 
 from vibe.core.config import VibeConfig
 
@@ -49,7 +50,7 @@ def test_summarization_config_validation_trigger_warning() -> None:
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
 
-        config = VibeConfig(
+        VibeConfig(
             enable_summarization=True,
             summarization_trigger_tokens=150000,  # Less than default auto_compact_threshold (200000)
             auto_compact_threshold=200000,

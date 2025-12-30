@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -79,7 +80,7 @@ class ListFilesToolConfig(BaseToolConfig):
     Extends BaseToolConfig without additional fields.
     """
 
-    model_config = {"extra": "allow"}
+    model_config: ClassVar[dict[str, str]] = {"extra": "allow"}
 
 
 class ListFilesToolState(BaseToolState):
@@ -91,7 +92,7 @@ class ListFilesToolState(BaseToolState):
         (none currently - reserved for future use)
     """
 
-    model_config = {"extra": "forbid"}
+    model_config: ClassVar[dict[str, str]] = {"extra": "forbid"}
 
     pass
 

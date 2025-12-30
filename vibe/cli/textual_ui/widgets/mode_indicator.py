@@ -4,7 +4,9 @@ from textual.widgets import Static
 
 
 class ModeIndicator(Static):
-    def __init__(self, auto_approve: bool = False, use_deepagents: bool = False) -> None:
+    def __init__(
+        self, auto_approve: bool = False, use_deepagents: bool = False
+    ) -> None:
         super().__init__()
         self.can_focus = False
         self._auto_approve = auto_approve

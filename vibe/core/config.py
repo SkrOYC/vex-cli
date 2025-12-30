@@ -6,8 +6,8 @@ from pathlib import Path
 import re
 import shlex
 import tomllib
-import warnings
 from typing import Annotated, Any, Literal
+import warnings
 
 from dotenv import dotenv_values
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -489,13 +489,16 @@ class VibeConfig(BaseSettings):
     @model_validator(mode="after")
     def validate_summarization_config(self) -> VibeConfig:
         """Validate summarization configuration settings."""
+        MIN_SUMMARIZATION_TRIGGER_TOKENS = 50000
+        MIN_SUMMARIZATION_KEEP_MESSAGES = 2
+
         if self.enable_summarization:
-            if self.summarization_trigger_tokens < 50000:
+            if self.summarization_trigger_tokens < MIN_SUMMARIZATION_TRIGGER_TOKENS:
                 raise ValueError(
                     "Summarization trigger must be >= 50000 tokens "
                     f"(got {self.summarization_trigger_tokens})"
                 )
-            if self.summarization_keep_messages < 2:
+            if self.summarization_keep_messages < MIN_SUMMARIZATION_KEEP_MESSAGES:
                 raise ValueError(
                     "Must keep at least 2 messages after summarization "
                     f"(got {self.summarization_keep_messages})"

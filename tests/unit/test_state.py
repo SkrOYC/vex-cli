@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from typing import get_type_hints
 
 from vibe.core.engine.state import VibeAgentState
@@ -13,16 +12,19 @@ class TestVibeAgentState:
 
     def test_extends_base_agentstate(self):
         """Test that VibeAgentState extends base AgentState."""
-        from langchain.agents.middleware.types import AgentState as BaseAgentState
         from typing import get_type_hints
+
+        from langchain.agents.middleware.types import AgentState as BaseAgentState
 
         # Check that VibeAgentState inherits the base fields
         base_hints = get_type_hints(BaseAgentState)
         vibe_hints = get_type_hints(VibeAgentState)
-        
+
         # VibeAgentState should have all base fields plus additional ones
         for field in base_hints:
-            assert field in vibe_hints, f"Field '{field}' from base AgentState should be in VibeAgentState"
+            assert field in vibe_hints, (
+                f"Field '{field}' from base AgentState should be in VibeAgentState"
+            )
 
     def test_has_messages_field(self):
         """Test that messages field is inherited from base AgentState."""
@@ -52,11 +54,7 @@ class TestVibeAgentState:
 
     def test_creates_valid_instance(self):
         """Test that a valid VibeAgentState instance can be created."""
-        state = VibeAgentState(
-            messages=[],
-            context_tokens=0,
-            warning=None,
-        )
+        state = VibeAgentState(messages=[], context_tokens=0, warning=None)
         assert state["messages"] == []
         assert state["context_tokens"] == 0
         assert state["warning"] is None
@@ -87,23 +85,24 @@ class TestVibeAgentStateUsage:
         """Test that VibeAgentState can be passed to create_agent."""
         # This is a compile-time check - if the import works, it can be used
         from vibe.core.engine.state import VibeAgentState
+
         assert VibeAgentState is not None
 
     def test_state_fields_match_issue_requirements(self):
         """Test that state fields match the requirements from issue #39.
-        
+
         Required fields from issue:
         - messages: Annotated[list, add_messages] (inherited)
         - context_tokens: int (custom)
         - warning: str | None (custom)
         """
         annotations = VibeAgentState.__annotations__
-        
+
         # Check required fields exist
         assert "messages" in annotations
         assert "context_tokens" in annotations
         assert "warning" in annotations
-        
+
         # Verify field types
         hints = get_type_hints(VibeAgentState)
         assert hints["context_tokens"] is int

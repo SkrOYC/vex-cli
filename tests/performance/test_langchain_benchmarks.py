@@ -8,23 +8,19 @@ See issue #41 for details on performance testing requirements.
 
 from __future__ import annotations
 
-import asyncio
-import time
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from langchain_core.tools import BaseTool
 import pytest
 
-from vibe.core.config import VibeConfig, SessionLoggingConfig
-from vibe.core.engine.langchain_engine import VibeLangChainEngine, VibeEngineStats
+from vibe.core.config import VibeConfig
+from vibe.core.engine.langchain_engine import VibeEngineStats, VibeLangChainEngine
 from vibe.core.engine.langchain_middleware import (
     ContextWarningMiddleware,
     PriceLimitMiddleware,
 )
 from vibe.core.engine.state import VibeAgentState
 from vibe.core.engine.tui_events import TUIEventMapper
-from langchain_core.tools import BaseTool
 
 
 class TestLangChainEngineBenchmarks:
@@ -429,7 +425,6 @@ class TestLangChainToolAdapterBenchmarks:
         tool = benchmark(create_bash_tool)
 
         # Should return a BaseTool
-        from langchain_core.tools import BaseTool
 
         assert isinstance(tool, BaseTool)
         assert "bash" in tool.name

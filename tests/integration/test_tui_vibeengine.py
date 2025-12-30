@@ -1,12 +1,13 @@
 """Integration tests for TUI with VibeEngine."""
 
-import pytest
-from unittest.mock import Mock, patch
+from __future__ import annotations
 
-from vibe.core.config import VibeConfig
+import pytest
+
 from vibe.cli.textual_ui.app import VibeApp
-from vibe.core.engine import VibeEngine
 from vibe.core.agent import Agent
+from vibe.core.config import VibeConfig
+from vibe.core.engine import VibeEngine
 
 
 class TestTuiVibeEngineIntegration:

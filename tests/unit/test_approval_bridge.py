@@ -1,8 +1,11 @@
 """Unit tests for ApprovalBridge with DeepAgents integration."""
 
-import pytest
+from __future__ import annotations
+
 import asyncio
-from unittest.mock import AsyncMock
+
+import pytest
+
 from vibe.core.engine.adapters import ApprovalBridge
 
 
@@ -10,6 +13,7 @@ from vibe.core.engine.adapters import ApprovalBridge
 def approval_bridge(config_dir):
     """Create an ApprovalBridge with minimal config for testing."""
     from vibe.core.config import VibeConfig
+
     config = VibeConfig()
     return ApprovalBridge(config=config)
 
@@ -32,20 +36,23 @@ class TestApprovalBridge:
     @pytest.mark.asyncio
     async def test_handle_interrupt_with_action_request_timeout(self, approval_bridge):
         """Test handling interrupt with action request times out.
-        
+
         Note: This test requires an approval_callback that doesn't respond.
         With auto-approval mode (no callback), the interrupt is approved immediately.
         """
         from vibe.core.config import VibeConfig
+
         config = VibeConfig()
-        
+
         async def non_responsive_callback(request: dict) -> dict:
             # Never respond - this would cause a timeout
             await asyncio.sleep(300)  # 5 minutes (much longer than test timeout)
             return {"approved": False}
-        
-        bridge = ApprovalBridge(config=config, approval_callback=non_responsive_callback)
-        
+
+        bridge = ApprovalBridge(
+            config=config, approval_callback=non_responsive_callback
+        )
+
         interrupt = {
             "data": {
                 "action_request": {
@@ -99,7 +106,6 @@ class TestApprovalBridge:
     @pytest.mark.asyncio
     async def test_respond_with_request_id(self, approval_bridge):
         """Test responding to specific request ID."""
-
         # Create a pending approval
         future = asyncio.Future()
         approval_bridge._pending_approvals["test-id"] = future
@@ -117,25 +123,27 @@ class TestApprovalBridge:
     @pytest.mark.asyncio
     async def test_respond_unknown_request_id(self, approval_bridge):
         """Test responding to unknown request ID."""
-
         # Should not raise
         await approval_bridge.respond(True, "unknown-id")
 
     @pytest.mark.asyncio
     async def test_multiple_concurrent_interrupts(self, approval_bridge):
         """Test handling multiple interrupts concurrently.
-        
+
         Note: This test requires an approval_callback that doesn't respond.
         With auto-approval mode (no callback), interrupts are approved immediately.
         """
         from vibe.core.config import VibeConfig
+
         config = VibeConfig()
-        
+
         async def non_responsive_callback(request: dict) -> dict:
             await asyncio.sleep(300)  # 5 minutes
             return {"approved": False}
-        
-        bridge = ApprovalBridge(config=config, approval_callback=non_responsive_callback)
+
+        bridge = ApprovalBridge(
+            config=config, approval_callback=non_responsive_callback
+        )
 
         interrupt1 = {
             "data": {
@@ -173,9 +181,11 @@ class TestApprovalBridge:
     @pytest.mark.asyncio
     async def test_malformed_interrupt_data(self, approval_bridge):
         """Test handling malformed interrupt data."""
-
         # Test with None data
-        result = await approval_bridge.handle_interrupt({"type": "interrupt", "data": None})
+        result = await approval_bridge.handle_interrupt({
+            "type": "interrupt",
+            "data": None,
+        })
         assert result == {"approved": True}
 
         # Test with empty dict
@@ -190,7 +200,6 @@ class TestApprovalBridge:
     @pytest.mark.asyncio
     async def test_respond_to_already_resolved_future(self, approval_bridge):
         """Test responding to a future that's already been resolved."""
-
         # Create and immediately resolve a future
         future = asyncio.Future()
         future.set_result({"approved": False, "feedback": "already done"})
@@ -205,7 +214,6 @@ class TestApprovalBridge:
     @pytest.mark.asyncio
     async def test_extract_action_request_edge_cases(self, approval_bridge):
         """Test action request extraction with edge cases."""
-
         # Test with missing fields in action_request
         interrupt = {
             "data": {

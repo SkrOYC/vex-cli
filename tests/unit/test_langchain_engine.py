@@ -1,8 +1,11 @@
 """Unit tests for VibeLangChainEngine with LangChain 1.2.0 integration."""
 
+from __future__ import annotations
+
 import pytest
+
 from vibe.core.config import VibeConfig
-from vibe.core.engine.langchain_engine import VibeLangChainEngine, VibeEngineStats
+from vibe.core.engine.langchain_engine import VibeEngineStats, VibeLangChainEngine
 
 
 class TestVibeLangChainEngine:
@@ -19,6 +22,7 @@ class TestVibeLangChainEngine:
 
     def test_initialization_with_approval_callback(self, langchain_config: VibeConfig):
         """Test engine initializes with approval callback."""
+
         async def dummy_callback(request):
             return {"approved": True}
 
@@ -85,9 +89,7 @@ class TestVibeLangChainEngine:
             max_price=None,
             models=[
                 pytest.importorskip("vibe.core.config").ModelConfig(
-                    name="gpt-4o-mini",
-                    provider="openai-compatible",
-                    alias="test-model"
+                    name="gpt-4o-mini", provider="openai-compatible", alias="test-model"
                 )
             ],
             providers=[
@@ -97,7 +99,7 @@ class TestVibeLangChainEngine:
                     api_key_env_var="OPENAI_API_KEY",
                     backend=pytest.importorskip("vibe.core.config").Backend.GENERIC,
                 )
-            ]
+            ],
         )
 
         engine = VibeLangChainEngine(config)
@@ -106,6 +108,7 @@ class TestVibeLangChainEngine:
         # Should have HumanInTheLoopMiddleware since default tools require approval
         assert len(middleware) >= 1
         from langchain.agents.middleware import HumanInTheLoopMiddleware
+
         assert any(isinstance(m, HumanInTheLoopMiddleware) for m in middleware)
 
     def test_pricing_config(self, langchain_config: VibeConfig):
@@ -115,7 +118,7 @@ class TestVibeLangChainEngine:
 
         assert isinstance(pricing, dict)
         # The test config should have a model with pricing
-        for model_name, (input_rate, output_rate) in pricing.items():
+        for _model_name, (input_rate, output_rate) in pricing.items():
             assert isinstance(input_rate, (int, float))
             assert isinstance(output_rate, (int, float))
             # Input price per million / 1_000_000 = per token rate
@@ -184,15 +187,14 @@ class TestLangChainImports:
     def test_no_deepagents_imports(self):
         """Verify no DeepAgents imports in langchain_engine module."""
         import vibe.core.engine.langchain_engine as langchain_engine
-        
+
         # Check the module doesn't import from deepagents
         assert "deepagents" not in langchain_engine.__file__
 
     def test_uses_langchain_create_agent(self):
         """Verify langchain.agents.create_agent is used."""
         from langchain.agents import create_agent as lc_create_agent
-        from vibe.core.engine.langchain_engine import VibeLangChainEngine
-        
+
         # The VibeLangChainEngine should use create_agent
         # This test verifies the import is available
         assert lc_create_agent is not None
@@ -200,6 +202,6 @@ class TestLangChainImports:
     def test_uses_human_in_the_loop_middleware(self):
         """Verify HumanInTheLoopMiddleware is imported."""
         from langchain.agents.middleware import HumanInTheLoopMiddleware
-        
+
         # Should be importable
         assert HumanInTheLoopMiddleware is not None

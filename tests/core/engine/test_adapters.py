@@ -1,6 +1,7 @@
 """Tests for EventTranslator."""
 
-import pytest
+from __future__ import annotations
+
 from vibe.core.config import VibeConfig
 from vibe.core.engine.adapters import EventTranslator
 
@@ -12,7 +13,7 @@ class TestEventTranslator:
         translator = EventTranslator(config)
         event = {
             "event": "on_chat_model_stream",
-            "data": {"chunk": type("MockChunk", (), {"content": "test"})()}
+            "data": {"chunk": type("MockChunk", (), {"content": "test"})()},
         }
         result = translator.translate(event)
         assert result is not None
@@ -26,7 +27,7 @@ class TestEventTranslator:
             "event": "on_tool_start",
             "name": "bash",
             "run_id": "123",
-            "data": {"input": {"command": "ls"}}
+            "data": {"input": {"command": "ls"}},
         }
         result = translator.translate(event)
         assert result is not None
@@ -42,7 +43,7 @@ class TestEventTranslator:
             "event": "on_tool_end",
             "name": "bash",
             "run_id": "123",
-            "data": {"output": "file1\nfile2"}
+            "data": {"output": "file1\nfile2"},
         }
         result = translator.translate(event)
         assert result is not None

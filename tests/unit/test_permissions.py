@@ -1,11 +1,12 @@
 """Unit tests for permission checking and pattern matching."""
 
-import pytest
+from __future__ import annotations
+
 from vibe.core.config import VibeConfig
 from vibe.core.engine.permissions import (
+    build_interrupt_config,
     check_allowlist_denylist,
     matches_pattern,
-    build_interrupt_config,
 )
 from vibe.core.tools.base import BaseToolConfig, ToolPermission
 

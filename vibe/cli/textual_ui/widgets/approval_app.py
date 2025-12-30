@@ -67,10 +67,10 @@ class ApprovalApp(Container):
         self.tool_info_container: Vertical | None = None
         self.option_widgets: list[Static] = []
         self.help_widget: Static | None = None
-        
+
         # Get reference to app's pending approval future
         self.app = self.app
-        self.pending_approval_future = getattr(self.app, '_pending_approval', None)
+        self.pending_approval_future = getattr(self.app, "_pending_approval", None)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="approval-content"):
@@ -184,7 +184,7 @@ class ApprovalApp(Container):
                 self._set_approval_result({
                     "approved": True,
                     "always_approve": False,
-                    "feedback": None
+                    "feedback": None,
                 })
                 self.post_message(
                     self.ApprovalGranted(action_request=self.action_request)
@@ -194,7 +194,7 @@ class ApprovalApp(Container):
                 self._set_approval_result({
                     "approved": True,
                     "always_approve": True,
-                    "feedback": f"Auto-approve {self.tool_name} for this session"
+                    "feedback": f"Auto-approve {self.tool_name} for this session",
                 })
                 self.post_message(
                     self.ApprovalGrantedAlwaysTool(
@@ -206,7 +206,7 @@ class ApprovalApp(Container):
                 self._set_approval_result({
                     "approved": False,
                     "always_approve": False,
-                    "feedback": "User rejected the operation"
+                    "feedback": "User rejected the operation",
                 })
                 self.post_message(
                     self.ApprovalRejected(action_request=self.action_request)

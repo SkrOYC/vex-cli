@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from langchain.agents.middleware.types import AgentMiddleware, AgentState
-
 from langchain_core.messages import AIMessage
 
 if TYPE_CHECKING:
+    from langchain.chat_models.base import BaseChatModel
     from langgraph.runtime import Runtime
 
     from vibe.core.config import VibeConfig
@@ -110,7 +110,7 @@ class PriceLimitMiddleware(AgentMiddleware):
         max_price: float,
         model_name: str,
         pricing: dict[str, tuple[float, float]] | None = None,
-    ):
+    ) -> None:
         self.max_price = max_price
         self.model_name = model_name
         self.pricing = pricing or {}  # model_name -> (input_rate, output_rate)
@@ -119,7 +119,7 @@ class PriceLimitMiddleware(AgentMiddleware):
     def before_model(
         self,
         state: AgentState,
-        runtime,  # type: ignore
+        runtime: Any,  # type: ignore
     ) -> dict[str, Any] | None:
         """No action needed before model call."""
         return None
@@ -151,8 +151,8 @@ class PriceLimitMiddleware(AgentMiddleware):
 
 def build_middleware_stack(
     config: VibeConfig,
-    model: "BaseChatModel",  # type: ignore
-    backend: "BackendProtocol",  # type: ignore
+    model: BaseChatModel,  # type: ignore
+    backend: Any,  # type: ignore
 ) -> list[AgentMiddleware]:
     """Build the complete middleware stack for the agent.
 
@@ -163,8 +163,6 @@ def build_middleware_stack(
     4. Human-in-the-loop (HumanInTheLoopMiddleware, for approvals)
     """
     from langchain.agents.middleware import HumanInTheLoopMiddleware
-
-    from deepagents.middleware.subagents import SubAgentMiddleware
 
     middleware: list[AgentMiddleware] = []
 

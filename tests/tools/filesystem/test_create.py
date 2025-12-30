@@ -21,8 +21,8 @@ from collections.abc import Iterator
 from pathlib import Path
 import tempfile
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from vibe.core.tools.filesystem.create import (
     CreateArgs,
@@ -33,7 +33,6 @@ from vibe.core.tools.filesystem.create import (
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
-
 
 # =============================================================================
 # Fixtures
@@ -167,7 +166,7 @@ class TestCreateToolState:
 
     def test_creation_with_defaults(self) -> None:
         """Test CreateToolState can be created with defaults."""
-        state = CreateToolState()
+        CreateToolState()
         # State should be empty - no attributes defined
 
 

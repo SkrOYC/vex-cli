@@ -49,29 +49,26 @@ class EventHandler:
         loading_active: bool = False,
         loading_widget: LoadingWidget | None = None,
     ) -> ToolCallMessage | None:
+        """Handle events and return tool call message if applicable."""
+        result: ToolCallMessage | None = None
         match event:
             case ToolCallEvent():
-                return await self._handle_tool_call(event, loading_widget)
+                result = await self._handle_tool_call(event, loading_widget)
             case ToolResultEvent():
                 sanitized_event = self._sanitize_event(event)
-
                 await self._handle_tool_result(sanitized_event)
-                return None
             case AssistantEvent():
                 await self._handle_assistant_message(event)
-                return None
             case InterruptEvent():
                 await self._handle_interrupt(event)
-                return None
             case CompactStartEvent():
                 await self._handle_compact_start()
-                return None
             case CompactEndEvent():
                 await self._handle_compact_end(event)
-                return None
             case _:
                 await self._handle_unknown_event(event)
-                return None
+
+        return result
 
     async def _handle_interrupt(self, event: InterruptEvent) -> None:
         if self.interrupt_callback:

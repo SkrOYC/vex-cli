@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langchain.agents.middleware.types import AgentMiddleware, AgentState
+from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
@@ -29,7 +29,7 @@ class VibeEngineStats:
 
     def __init__(
         self, messages: int = 0, context_tokens: int = 0, todos: list[Any] | None = None
-    ):
+    ) -> None:
         self._messages = messages
         self._todos = todos or []
         self.steps = 0

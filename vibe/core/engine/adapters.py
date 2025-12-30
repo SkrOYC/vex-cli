@@ -19,6 +19,7 @@ from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel
+
 from vibe.core.config import VibeConfig
 from vibe.core.engine.permissions import get_effective_permission
 from vibe.core.tools.base import BaseTool, ToolPermission
@@ -51,7 +52,7 @@ class EventTranslator:
     This class is only kept for backward compatibility with VibeEngine (DeepAgents).
     """
 
-    def __init__(self, config: VibeConfig):
+    def __init__(self, config: VibeConfig) -> None:
         import warnings
 
         warnings.warn(
@@ -186,7 +187,7 @@ class ApprovalBridge:
             "tool_call_id": action_request.get("tool_call_id", ""),
         }
 
-    async def handle_interrupt(self, interrupt: dict[str, Any]) -> dict[str, Any]:
+    async def handle_interrupt(self, interrupt: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0911
         """Handle LangGraph interrupts for approval."""
         # Extract ActionRequest from interrupt data
         action_request = self._extract_action_request(interrupt)
@@ -249,7 +250,7 @@ class ApprovalBridge:
                     "feedback": "Auto-approved (no approval callback)",
                 }
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Auto-reject on timeout
             if request_id in self._pending_approvals:
                 del self._pending_approvals[request_id]

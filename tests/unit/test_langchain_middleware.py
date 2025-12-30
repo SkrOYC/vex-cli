@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import cast
 
-import pytest
-
 from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
+import pytest
 
 from vibe.core.engine.langchain_middleware import (
     ContextWarningMiddleware,
@@ -21,7 +20,7 @@ class TestContextWarningMiddleware:
     def test_no_warning_when_below_threshold(self):
         """Test that no warning is injected when below threshold."""
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
-        
+
         # Create a mock state with messages but low token count
         state = {"messages": ["short message"] * 10}  # ~40 tokens, below 500 threshold
 
@@ -163,7 +162,9 @@ class TestPriceLimitMiddleware:
         from langchain_core.messages import AIMessage
 
         pricing = {"test-model": (0.001, 0.002)}  # $1.00 per 1k tokens
-        middleware = PriceLimitMiddleware(max_price=1.0, model_name="test-model", pricing=pricing)
+        middleware = PriceLimitMiddleware(
+            max_price=1.0, model_name="test-model", pricing=pricing
+        )
 
         # Create AI message with usage metadata (1000 input + 500 output = 1500 tokens = $1.50)
         ai_message = AIMessage(
@@ -233,7 +234,9 @@ class TestPriceLimitMiddleware:
         from langchain_core.messages import AIMessage
 
         pricing = {"other-model": (0.001, 0.002)}
-        middleware = PriceLimitMiddleware(max_price=1.0, model_name="test-model", pricing=pricing)
+        middleware = PriceLimitMiddleware(
+            max_price=1.0, model_name="test-model", pricing=pricing
+        )
 
         # Create AI message with unknown model
         ai_message = AIMessage(
