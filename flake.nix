@@ -1,5 +1,5 @@
 {
-  description = "Vex CLI";
+  description = "A modern CLI coding assistant powered by LangChain";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -77,6 +77,10 @@
           type = "app";
           program = "${self.packages.${system}.default}/bin/vibe";
         };
+        vibe-acp = {
+          type = "app";
+          program = "${self.packages.${system}.default}/bin/vibe-acp";
+        };
       };
 
       devShells = {
@@ -129,6 +133,12 @@
 
               # Prevent uv from downloading managed Python's
               UV_PYTHON_DOWNLOADS = "never";
+
+              # Prefer system Python over managed Python
+              UV_PYTHON_PREFERENCE = "system";
+
+              # Use copy mode instead of symlinks to avoid issues
+              UV_LINK_MODE = "copy";
             };
 
             shellHook = ''
@@ -137,6 +147,15 @@
 
               # Get repository root using git. This is expanded at runtime by the editable `.pth` machinery.
               export REPO_ROOT=$(git rev-parse --show-toplevel)
+
+              # Clear VIRTUAL_ENV if set from outside to prevent warnings
+              unset VIRTUAL_ENV
+
+              # Ensure user site is not used to avoid conflicts
+              export PYTHONNOUSERSITE=1
+
+              # Add REPO_ROOT to PYTHONPATH for editable installs (workaround for empty .pth file)
+              export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
             '';
           };
       };
