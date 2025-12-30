@@ -158,6 +158,7 @@ class PriceLimitMiddleware(AgentMiddleware):
     Example:
         middleware = PriceLimitMiddleware(
             max_price=10.0,  # $10 limit
+            model_name="gpt-4o",
             pricing={
                 "gpt-4o": (0.000005, 0.000015),  # $5/$15 per 1M tokens
             },
@@ -167,16 +168,19 @@ class PriceLimitMiddleware(AgentMiddleware):
     def __init__(
         self,
         max_price: float,
+        model_name: str,
         pricing: dict[str, tuple[float, float]] | None = None,
     ) -> None:
         """Initialize the price limit middleware.
         
         Args:
             max_price: Maximum total cost allowed in dollars
+            model_name: The name of the model to use for pricing lookup
             pricing: Dict mapping model names to (input_rate, output_rate) tuples
                     Rates are per-token (not per-million-tokens)
         """
         self.max_price = max_price
+        self.model_name = model_name
         self.pricing = pricing or {}  # model_name -> (input_rate, output_rate)
         self._total_cost = 0.0
 
@@ -206,9 +210,8 @@ class PriceLimitMiddleware(AgentMiddleware):
         if messages and isinstance(messages[-1], AIMessage):
             latest_response = messages[-1]
             if latest_response.usage_metadata:
-                # Get pricing for the model
-                model_name = state.get("model_name", "default")
-                input_rate, output_rate = self.pricing.get(model_name, (0.0, 0.0))
+                # Get pricing for the model using stored model_name
+                input_rate, output_rate = self.pricing.get(self.model_name, (0.0, 0.0))
 
                 # Calculate cost using actual token counts
                 input_tokens = latest_response.usage_metadata.get("input_tokens", 0)

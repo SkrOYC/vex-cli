@@ -124,9 +124,14 @@ class VibeLangChainEngine:
 
         # Price limit (Vibe-specific)
         if self.config.max_price is not None:
+            # Get the active model's name for pricing lookup
+            active_model = self.config.get_active_model()
+            model_name = active_model.name
+
             middleware.append(
                 PriceLimitMiddleware(
                     max_price=self.config.max_price,
+                    model_name=model_name,
                     pricing=self._get_pricing_config(),
                 )
             )

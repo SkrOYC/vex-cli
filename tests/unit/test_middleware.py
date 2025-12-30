@@ -71,7 +71,9 @@ class TestPriceLimitMiddleware:
         from langchain_core.messages import AIMessage
 
         pricing = {"test-model": (0.0001, 0.0002)}  # $0.10 per 1k tokens
-        middleware = PriceLimitMiddleware(max_price=1.0, pricing=pricing)
+        middleware = PriceLimitMiddleware(
+            max_price=1.0, model_name="test-model", pricing=pricing
+        )
 
         # Create AI message with usage metadata
         ai_message = AIMessage(
@@ -93,7 +95,9 @@ class TestPriceLimitMiddleware:
         from langchain_core.messages import AIMessage
 
         pricing = {"test-model": (0.001, 0.002)}  # $1.00 per 1k tokens
-        middleware = PriceLimitMiddleware(max_price=1.0, pricing=pricing)
+        middleware = PriceLimitMiddleware(
+            max_price=1.0, model_name="test-model", pricing=pricing
+        )
 
         # Create AI message with usage metadata (1000 input + 500 output = 1500 tokens = $1.50)
         ai_message = AIMessage(
@@ -114,7 +118,9 @@ class TestPriceLimitMiddleware:
         from langchain_core.messages import AIMessage
 
         pricing = {"test-model": (0.00005, 0.00005)}  # $0.05 per 1k tokens
-        middleware = PriceLimitMiddleware(max_price=0.15, pricing=pricing)
+        middleware = PriceLimitMiddleware(
+            max_price=0.15, model_name="test-model", pricing=pricing
+        )
 
         # First call: 1000 input + 500 output = 1500 tokens = $0.075
         ai_message1 = AIMessage(

@@ -106,9 +106,13 @@ class PriceLimitMiddleware(AgentMiddleware):
         return "price_limit"
 
     def __init__(
-        self, max_price: float, pricing: dict[str, tuple[float, float]] | None = None
+        self,
+        max_price: float,
+        model_name: str,
+        pricing: dict[str, tuple[float, float]] | None = None,
     ):
         self.max_price = max_price
+        self.model_name = model_name
         self.pricing = pricing or {}  # model_name -> (input_rate, output_rate)
         self._total_cost = 0.0
 
@@ -127,9 +131,8 @@ class PriceLimitMiddleware(AgentMiddleware):
         if messages and isinstance(messages[-1], AIMessage):
             latest_response = messages[-1]
             if latest_response.usage_metadata:
-                # Get pricing for the model
-                model_name = state.get("model_name", "default")
-                input_rate, output_rate = self.pricing.get(model_name, (0.0, 0.0))
+                # Get pricing for the model using stored model_name
+                input_rate, output_rate = self.pricing.get(self.model_name, (0.0, 0.0))
 
                 # Calculate cost using actual token counts
                 input_tokens = latest_response.usage_metadata.get("input_tokens", 0)
@@ -189,7 +192,11 @@ def build_middleware_stack(
                 model_config.output_price / 1_000_000,
             )
 
-        middleware.append(PriceLimitMiddleware(config.max_price, pricing))
+        # Get the active model's name for pricing lookup
+        active_model = config.get_active_model()
+        model_name = active_model.name
+
+        middleware.append(PriceLimitMiddleware(config.max_price, model_name, pricing))
 
     # 4. Human-in-the-loop (for approvals) - independent of price limit
     from vibe.core.engine.permissions import build_interrupt_config
