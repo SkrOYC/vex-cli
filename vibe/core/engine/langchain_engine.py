@@ -15,6 +15,8 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from vibe.core.config import VibeConfig
+from vibe.core.engine.langchain_middleware import ContextWarningMiddleware, PriceLimitMiddleware
+from vibe.core.engine.state import VibeAgentState
 from vibe.core.engine.tools import VibeToolAdapter
 
 
@@ -113,8 +115,6 @@ class VibeLangChainEngine:
 
         # Context warnings (Vibe-specific)
         if self.config.context_warnings:
-            from vibe.core.engine.middleware import ContextWarningMiddleware
-
             middleware.append(
                 ContextWarningMiddleware(
                     threshold_percent=0.5,
@@ -124,8 +124,6 @@ class VibeLangChainEngine:
 
         # Price limit (Vibe-specific)
         if self.config.max_price is not None:
-            from vibe.core.engine.middleware import PriceLimitMiddleware
-
             middleware.append(
                 PriceLimitMiddleware(
                     max_price=self.config.max_price,
@@ -158,6 +156,7 @@ class VibeLangChainEngine:
             tools=tools,
             system_prompt=self._get_system_prompt(),
             middleware=self._build_middleware_stack(),
+            state_schema=VibeAgentState,
             checkpointer=self._checkpointer,
             interrupt_before=["tools"],
         )

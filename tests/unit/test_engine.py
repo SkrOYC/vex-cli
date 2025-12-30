@@ -20,11 +20,14 @@ class TestVibeEngine:
         assert engine.config == deepagents_config
 
     def test_initialization_with_approval_bridge(self, deepagents_config: VibeConfig):
-        """Test engine initializes with approval bridge."""
-        approval_bridge = ApprovalBridge()
-        engine = VibeEngine(deepagents_config, approval_callback=approval_bridge)
+        """Test engine initializes with approval callback."""
+        async def approval_callback(data):
+            return {"approved": True, "feedback": None}
+        
+        engine = VibeEngine(deepagents_config, approval_callback=approval_callback)
 
-        assert engine.approval_bridge == approval_bridge
+        # After initialization, approval_bridge should be created
+        assert engine.approval_callback == approval_callback
 
     def test_use_deepagents_flag(self, deepagents_config: VibeConfig):
         """Test that the use_deepagents flag is properly set."""

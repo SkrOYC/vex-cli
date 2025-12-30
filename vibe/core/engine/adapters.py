@@ -1,4 +1,8 @@
-"""Event and approval adapters for DeepAgents integration."""
+"""Event and approval adapters for DeepAgents integration.
+
+TODO: Remove ApprovalBridge after full migration to native HITL (see issue #39).
+The native HumanInTheLoopMiddleware replaces this adapter for LangChain 1.2.0+.
+"""
 
 from __future__ import annotations
 
