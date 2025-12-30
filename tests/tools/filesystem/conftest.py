@@ -62,21 +62,12 @@ def tool(
 
 
 @pytest.fixture
-def grep_config(temp_dir: Path) -> GrepToolConfig:
-    """Create a GrepToolConfig for testing."""
-    return GrepToolConfig(workdir=temp_dir)
+def grep_tool(temp_dir: Path) -> GrepTool:
+    """Create a GrepTool instance for testing.
 
-
-@pytest.fixture
-def grep_state() -> GrepToolState:
-    """Create a fresh GrepToolState for each test."""
-    return GrepToolState()
-
-
-@pytest.fixture
-def grep_tool(grep_config: GrepToolConfig, grep_state: GrepToolState) -> GrepTool:
-    """Create a GrepTool instance for testing."""
-    return GrepTool(config=grep_config, state=grep_state)
+    Uses the same temp_dir as the test to ensure file visibility.
+    """
+    return GrepTool(config=GrepToolConfig(workdir=temp_dir), state=GrepToolState())
 
 
 # Re-export commonly used classes for convenience
@@ -91,8 +82,6 @@ __all__ = [
     "ListFilesTool",
     "ListFilesToolConfig",
     "ListFilesToolState",
-    "grep_config",
-    "grep_state",
     "grep_tool",
     "temp_dir",
     "tool",

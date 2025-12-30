@@ -390,10 +390,11 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         Returns:
             List of text file paths to search.
         """
-        files: list[Path] = []
+        # Use set for O(1) lookup to avoid O(n²) complexity
+        candidate_files: set[Path] = set()
 
         if args.patterns:
-            # Use patterns to find files
+            # Use provided patterns
             for pattern in args.patterns:
                 if args.recursive:
                     matches = search_path.rglob(pattern)
@@ -401,40 +402,44 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
                     matches = search_path.glob(pattern)
 
                 for file_path in matches:
-                    if not file_path.is_file():
-                        continue
-
-                    if not args.include_hidden and file_path.name.startswith("."):
-                        continue
-
-                    if file_path not in files and self._is_text_file(file_path):
-                        files.append(file_path)
-        # No patterns - search all text files in directory
-        elif args.recursive:
-            for file_path in search_path.rglob("*"):
-                if not file_path.is_file():
-                    continue
-
-                if not args.include_hidden and file_path.name.startswith("."):
-                    continue
-
-                if self._is_text_file(file_path):
-                    files.append(file_path)
+                    if file_path.is_file():
+                        candidate_files.add(file_path)
         else:
-            for file_path in search_path.iterdir():
-                if not file_path.is_file():
-                    continue
+            # No patterns - search all files in directory
+            if args.recursive:
+                # Use rglob("*") to find all files recursively (equivalent to **/*)
+                for file_path in search_path.rglob("*"):
+                    if file_path.is_file():
+                        candidate_files.add(file_path)
+            else:
+                # Use glob("*") for immediate children only
+                for file_path in search_path.glob("*"):
+                    if file_path.is_file():
+                        candidate_files.add(file_path)
 
-                if not args.include_hidden and file_path.name.startswith("."):
-                    continue
+        # Filter text files with proper hidden directory handling
+        text_files: list[Path] = []
+        for file_path in candidate_files:
+            # Exclude hidden files and files in hidden directories unless requested
+            if not args.include_hidden:
+                try:
+                    # Get relative path to check all parts
+                    relative_path = file_path.relative_to(search_path)
+                    # Check if any path component starts with dot
+                    if any(part.startswith(".") for part in relative_path.parts):
+                        continue
+                except ValueError:
+                    # Fallback for paths not directly under search_path (e.g., symlinks)
+                    if file_path.name.startswith("."):
+                        continue
 
-                if self._is_text_file(file_path):
-                    files.append(file_path)
+            if self._is_text_file(file_path):
+                text_files.append(file_path)
 
         # Sort alphabetically (case-insensitive)
-        files.sort(key=lambda p: str(p).casefold())
+        text_files.sort(key=lambda p: str(p).casefold())
 
-        return files
+        return text_files
 
     # =============================================================================
     # Regex Creation
@@ -492,12 +497,16 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         regex = self._create_search_regex(args.query, args.case_sensitive, args.regex)
 
         for file_path in files:
-            if total_matches >= args.max_results:
+            # Calculate remaining capacity for this file
+            remaining_capacity = args.max_results - total_matches
+            if remaining_capacity <= 0:
                 break
 
             try:
                 content = file_path.read_text(encoding="utf-8", errors="ignore")
-                file_matches = self._search_file_content(content, regex, args)
+                file_matches = self._search_file_content(
+                    content, regex, remaining_capacity
+                )
 
                 if file_matches:
                     results.append({"path": str(file_path), "matches": file_matches})
@@ -509,38 +518,55 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         return results
 
     def _search_file_content(
-        self, content: str, regex: re.Pattern[str], args: GrepArgs
+        self, content: str, regex: re.Pattern[str], max_results: int
     ) -> list[SearchMatch]:
         """Search content for regex matches with context.
+
+        Supports multi-line regex patterns by searching the full content.
 
         Args:
             content: File content to search.
             regex: Compiled regex pattern.
-            args: GrepArgs with search options.
+            max_results: Maximum number of matches to return.
 
         Returns:
             List of match dictionaries with line, column, text, and context.
         """
-        lines = content.split("\n")
         matches: list[SearchMatch] = []
+        lines = content.split("\n")
 
-        for i, line in enumerate(lines):
-            if len(matches) >= args.max_results:
+        # Use finditer on full content to support multi-line regex patterns
+        for match in regex.finditer(content):
+            if len(matches) >= max_results:
                 break
 
-            match = regex.search(line)
+            # Calculate line number (1-based)
+            match_start = match.start()
+            line_number = content.count("\n", 0, match_start) + 1
 
-            if match:
-                context = self._build_context_lines(
-                    lines, i, DEFAULT_CONTEXT_BEFORE, DEFAULT_CONTEXT_AFTER
-                )
+            # Calculate column number (1-based) - position within the line
+            last_newline = content.rfind("\n", 0, match_start)
+            if last_newline == -1:
+                column_number = match_start + 1
+            else:
+                column_number = match_start - last_newline
 
-                matches.append({
-                    "line": i + 1,  # 1-based line number
-                    "column": match.start() + 1,  # 1-based column number
-                    "text": line,
-                    "context": context,
-                })
+            # Get the line content containing the match
+            line_content = (
+                lines[line_number - 1] if 0 <= line_number - 1 < len(lines) else ""
+            )
+
+            # Build context lines
+            context = self._build_context_lines(
+                lines, line_number - 1, DEFAULT_CONTEXT_BEFORE, DEFAULT_CONTEXT_AFTER
+            )
+
+            matches.append({
+                "line": line_number,
+                "column": column_number,
+                "text": line_content,
+                "context": context,
+            })
 
         return matches
 
