@@ -35,7 +35,6 @@ from vibe.core.tools.filesystem.types import (
     DEFAULT_CONTEXT_AFTER,
     DEFAULT_CONTEXT_BEFORE,
     OUTPUT_LIMIT,
-    FileSystemError,
 )
 
 # =============================================================================
@@ -246,27 +245,18 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
 
         # Validate path exists
         if not resolved_path.exists():
-            raise FileSystemError(
-                message=f"Directory not found: '{args.path}'",
-                code="DIRECTORY_NOT_FOUND",
-                path=str(resolved_path),
-                suggestions=[
-                    f"The specified directory doesn't exist in current working directory: {self.config.effective_workdir}",
-                    "Use 'list' command to explore available directories",
-                    "Check if the path is correct",
-                ],
+            raise ValueError(
+                f"Directory not found: '{args.path}'\n\n"
+                f"The specified directory doesn't exist in current working directory: {self.config.effective_workdir}\n"
+                "Try using 'list' command to explore available directories."
             )
 
         # Check if path is a directory
         if not resolved_path.is_dir():
-            raise FileSystemError(
-                message=f"Path is not a directory: '{args.path}'",
-                code="PATH_NOT_DIRECTORY",
-                path=str(resolved_path),
-                suggestions=[
-                    "Use 'view' command to examine file contents",
-                    "Specify a directory path to search",
-                ],
+            raise ValueError(
+                f"Path is not a directory: '{args.path}'\n\n"
+                "Use 'view' command to examine file contents.\n"
+                "Specify a directory path to search."
             )
 
         try:
@@ -274,16 +264,12 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
             text_files = await self._get_text_files_for_search(resolved_path, args)
 
             if not text_files:
-                raise FileSystemError(
-                    message=f"No text files found in: '{args.path}'",
-                    code="NO_TEXT_FILES",
-                    path=str(resolved_path),
-                    suggestions=[
-                        "The search only works on text files. Try:",
-                        "• Use 'list' command to see what files are in directory",
-                        "• Specify a directory with known text files",
-                        "• Add file patterns to search specific file types",
-                    ],
+                raise ValueError(
+                    f"No text files found in: '{args.path}'\n\n"
+                    "The search only works on text files. Try:\n"
+                    "• Use 'list' command to see what files are in directory\n"
+                    "• Specify a directory with known text files\n"
+                    "• Add file patterns to search specific file types"
                 )
 
             # Execute search
@@ -310,14 +296,19 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
 
         except ValueError as e:
             # Re-raise regex errors with helpful message
-            raise ValueError(
-                f"Invalid regex pattern: {args.query}\n\n"
-                "The provided regex pattern is invalid. Check for:\n"
-                "• Unmatched parentheses or brackets\n"
-                "• Incomplete escape sequences\n"
-                "• Invalid quantifiers\n\n"
-                "Try escaping special characters with regex=false for literal search."
-            ) from e
+            error_msg = str(e)
+            if "Invalid regex pattern" in error_msg:
+                # Wrap the regex error with helpful message
+                raise ValueError(
+                    f"{error_msg}\n\n"
+                    "The provided regex pattern is invalid. Check for:\n"
+                    "• Unmatched parentheses or brackets\n"
+                    "• Incomplete escape sequences\n"
+                    "• Invalid quantifiers\n\n"
+                    "Try escaping special characters with regex=false for literal search."
+                ) from e
+            # For other errors (like "No text files found"), re-raise as-is
+            raise
 
     # =============================================================================
     # Path Resolution
@@ -404,18 +395,17 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
                 for file_path in matches:
                     if file_path.is_file():
                         candidate_files.add(file_path)
+        # No patterns - search all files in directory
+        elif args.recursive:
+            # Use rglob("*") to find all files recursively (equivalent to **/*)
+            for file_path in search_path.rglob("*"):
+                if file_path.is_file():
+                    candidate_files.add(file_path)
         else:
-            # No patterns - search all files in directory
-            if args.recursive:
-                # Use rglob("*") to find all files recursively (equivalent to **/*)
-                for file_path in search_path.rglob("*"):
-                    if file_path.is_file():
-                        candidate_files.add(file_path)
-            else:
-                # Use glob("*") for immediate children only
-                for file_path in search_path.glob("*"):
-                    if file_path.is_file():
-                        candidate_files.add(file_path)
+            # Use glob("*") for immediate children only
+            for file_path in search_path.glob("*"):
+                if file_path.is_file():
+                    candidate_files.add(file_path)
 
         # Filter text files with proper hidden directory handling
         text_files: list[Path] = []
@@ -638,7 +628,12 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         path = result["path"]
         matches = result["matches"]
 
-        output = f"{path}\n"
+        # Use first match's line number for file header suffix
+        if matches:
+            first_match_line = matches[0]["line"]
+            output = f"{path}:{first_match_line}\n"
+        else:
+            output = f"{path}\n"
 
         if not matches:
             return output
@@ -678,33 +673,35 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         output = ""
         context = match.get("context")
         line_num = match["line"]
+        padded_num = str(line_num).rjust(max_line_num_width)
 
-        # Format context before
+        # Format context before (with leading spaces for alignment)
         if context:
             before_lines = context.get("before", [])
             start_line = line_num - len(before_lines)
             for j, ctx_line in enumerate(before_lines):
                 line_number = start_line + j
                 if line_number not in displayed_lines:
-                    padded_num = str(line_number).rjust(max_line_num_width)
-                    output += f"{padded_num} {ctx_line}\n"
+                    output += (
+                        f"  {str(line_number).rjust(max_line_num_width)} {ctx_line}\n"
+                    )
                     displayed_lines.add(line_number)
 
-        # Format the match line
+        # Format the match line (with > prefix)
         if line_num not in displayed_lines:
-            padded_num = str(line_num).rjust(max_line_num_width)
-            output += f"{padded_num} {match['text']}\n"
+            output += f"> {padded_num} {match['text']}\n"
             displayed_lines.add(line_num)
 
-        # Format context after
+        # Format context after (with leading spaces for alignment)
         if context:
             after_lines = context.get("after", [])
             start_line = line_num + 1
             for j, ctx_line in enumerate(after_lines):
                 line_number = start_line + j
                 if line_number not in displayed_lines:
-                    padded_num = str(line_number).rjust(max_line_num_width)
-                    output += f"{padded_num} {ctx_line}\n"
+                    output += (
+                        f"  {str(line_number).rjust(max_line_num_width)} {ctx_line}\n"
+                    )
                     displayed_lines.add(line_number)
 
         return output

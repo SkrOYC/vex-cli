@@ -23,7 +23,6 @@ from pydantic import ValidationError
 import pytest
 
 from vibe.core.tools.filesystem.grep import GrepArgs, GrepTool
-from vibe.core.tools.filesystem.types import FileSystemError
 
 # Mark all async tests
 pytestmark = pytest.mark.asyncio
@@ -444,10 +443,10 @@ line9
             GrepArgs(path=".", query="def hello", recursive=True)
         )
 
-        # Should start with file path
-        assert "main.py" in result.output
-        # Should have line numbers
-        assert "1" in result.output
+        # Should start with file path with line number suffix
+        assert "main.py:1" in result.output
+        # Match line should have > prefix with proper padding
+        assert ">   1 def hello()" in result.output
 
     # =============================================================================
     # Binary File Filtering Tests
@@ -477,24 +476,35 @@ line9
         self, grep_tool: GrepTool, temp_dir: Path
     ) -> None:
         """Test error when directory doesn't exist."""
-        with pytest.raises(FileSystemError) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             await grep_tool.run(GrepArgs(path="/nonexistent/directory", query="test"))
 
-        assert exc_info.value.code == "DIRECTORY_NOT_FOUND"
-        assert "nonexistent" in str(exc_info.value).lower()
+        error_msg = str(exc_info.value)
+        # Check for exact error format
+        assert "Directory not found: '/nonexistent/directory'" in error_msg
+        assert (
+            "The specified directory doesn't exist in current working directory"
+            in error_msg
+        )
+        assert "Try using 'list' command to explore available directories" in error_msg
 
     async def test_no_text_files_error(
         self, grep_tool: GrepTool, temp_dir: Path
     ) -> None:
         """Test error when no text files found."""
-        # Create directory with only binary files
-        (temp_dir / "test.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+        # Create a directory with only truly binary files (null bytes)
+        binary_file = temp_dir / "test.bin"
+        binary_file.write_bytes(b"\x00\x01\x02\x03\x04\x05")
 
-        with pytest.raises(FileSystemError) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             await grep_tool.run(GrepArgs(path=".", query="test"))
 
-        assert exc_info.value.code == "NO_TEXT_FILES"
-        assert "text files" in str(exc_info.value).lower()
+        error_msg = str(exc_info.value)
+        # Check for exact error format with • bullets
+        assert "No text files found" in error_msg
+        assert "• Use 'list' command to see what files are in directory" in error_msg
+        assert "• Specify a directory with known text files" in error_msg
+        assert "• Add file patterns to search specific file types" in error_msg
 
     async def test_invalid_regex_error(
         self, grep_tool: GrepTool, temp_dir: Path
@@ -505,7 +515,12 @@ line9
         with pytest.raises(ValueError) as exc_info:
             await grep_tool.run(GrepArgs(path=".", query="[unclosed", regex=True))
 
-        assert "Invalid regex pattern" in str(exc_info.value)
+        error_msg = str(exc_info.value)
+        # Check for exact error format with • bullets
+        assert "Invalid regex pattern" in error_msg
+        assert "• Unmatched parentheses or brackets" in error_msg
+        assert "• Incomplete escape sequences" in error_msg
+        assert "• Invalid quantifiers" in error_msg
 
     # =============================================================================
     # Path Resolution Tests
@@ -537,7 +552,11 @@ line9
         """Test error when path is a file instead of directory."""
         (temp_dir / "main.py").write_text("test\n")
 
-        with pytest.raises(FileSystemError) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             await grep_tool.run(GrepArgs(path=str(temp_dir / "main.py"), query="test"))
 
-        assert exc_info.value.code == "PATH_NOT_DIRECTORY"
+        error_msg = str(exc_info.value)
+        # Check for exact error format
+        assert "Path is not a directory" in error_msg
+        assert "Use 'view' command to examine file contents" in error_msg
+        assert "Specify a directory path to search" in error_msg
