@@ -22,6 +22,7 @@ from pathlib import Path
 import tempfile
 
 import pytest
+from pydantic import ValidationError
 
 from vibe.core.tools.filesystem.create import (
     CreateArgs,
@@ -107,17 +108,17 @@ class TestCreateArgs:
 
     def test_model_validation(self) -> None:
         """Test CreateArgs validates types correctly."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CreateArgs(path=123, file_text="text")  # type: ignore
 
     def test_model_validation_missing_path(self) -> None:
         """Test CreateArgs requires path field."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CreateArgs(file_text="text")  # type: ignore
 
     def test_model_validation_missing_file_text(self) -> None:
         """Test CreateArgs requires file_text field."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CreateArgs(path="/test/file.txt")  # type: ignore
 
 

@@ -148,11 +148,6 @@ class CreateTool(BaseTool[CreateArgs, CreateResult, CreateToolConfig, CreateTool
                 message=f"Cannot create file - it already exists: '{resolved_path}'\n\n• If you want to replace entire file: use 'edit' command\n• If you want to modify specific parts: use 'str_replace' command\n• If you want a different file: choose a different filename/location",
                 code="FILE_ALREADY_EXISTS",
                 path=str(resolved_path),
-                suggestions=[
-                    "Use 'edit' command to replace entire file content",
-                    "Use 'edit_file' (str_replace) command to modify specific parts",
-                    "Choose a different filename or location",
-                ],
             )
 
         # Create parent directories if they don't exist
