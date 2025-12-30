@@ -162,22 +162,12 @@ The specified file doesn't exist. Use 'write_file' command to create a new file,
         # Read current content with UTF-8 encoding
         old_content = resolved_path.read_text(encoding="utf-8")
 
-        # Handle empty file case
+        # Determine new content based on file state
         if old_content == "":
+            # Handle empty file case
             if args.insert_line == 1:
-                # Can insert into empty file at line 1
-                self._push_history(str(resolved_path), old_content)
-                resolved_path.write_text(args.new_str, encoding="utf-8")
-
-                # Record view after successful insert if view_tracker is configured
-                if self.config.view_tracker is not None:
-                    self.config.view_tracker.record_view(str(resolved_path))
-
-                return InsertLineResult(
-                    output=f"Content inserted into '{resolved_path}' at line {args.insert_line}."
-                )
+                new_content = args.new_str
             else:
-                # Empty file can only have line 1
                 raise FileSystemError(
                     message=f"Invalid line number: {args.insert_line} is out of bounds for empty file '{resolved_path}'\n\nFor empty files, you can only insert at line 1. Use insertLine: 1 to add content to an empty file.",
                     code="LINE_OUT_OF_BOUNDS",
@@ -188,41 +178,44 @@ The specified file doesn't exist. Use 'write_file' command to create a new file,
                         "Use 'write_file' command to add content to an empty file",
                     ],
                 )
+        else:
+            # Handle non-empty file
+            lines = old_content.split("\n")
+            num_lines = len(lines)
 
-        # Split content into lines
-        lines = old_content.split("\n")
-        num_lines = len(lines)
+            # Convert 1-based to 0-based index
+            zero_index = args.insert_line - 1
 
-        # Convert 1-based to 0-based index
-        zero_index = args.insert_line - 1
+            # Validate bounds: valid range is 0 to num_lines (inclusive)
+            # This means insert_line can be from 1 to num_lines + 1
+            if zero_index < 0 or zero_index > num_lines:
+                raise FileSystemError(
+                    message=f"Line number {args.insert_line} is out of bounds for '{resolved_path}' ({num_lines} lines)\n\nValid range: [1, {num_lines + 1}].\n• Use 1 to insert at the beginning\n• Use {num_lines + 1} to insert at the end\n• Use 'read_file' command first to see the file structure",
+                    code="LINE_OUT_OF_BOUNDS",
+                    path=str(resolved_path),
+                    suggestions=[
+                        "Use 1 to insert at the beginning",
+                        f"Use {num_lines + 1} to insert at the end",
+                        "Use 'read_file' command first to see the file structure",
+                    ],
+                )
 
-        # Validate bounds: valid range is 0 to num_lines (inclusive)
-        # This means insert_line can be from 1 to num_lines + 1
-        if zero_index < 0 or zero_index > num_lines:
-            raise FileSystemError(
-                message=f"Line number {args.insert_line} is out of bounds for '{resolved_path}' ({num_lines} lines)\n\nValid range: [1, {num_lines + 1}].\n• Use 1 to insert at the beginning\n• Use {num_lines + 1} to insert at the end\n• Use 'read_file' command first to see the file structure",
-                code="LINE_OUT_OF_BOUNDS",
-                path=str(resolved_path),
-                suggestions=[
-                    "Use 1 to insert at the beginning",
-                    f"Use {num_lines + 1} to insert at the end",
-                    "Use 'read_file' command first to see the file structure",
-                ],
-            )
+            # Perform the insertion
+            # Handle inserting at the end of a file with a trailing newline correctly
+            if zero_index == num_lines and old_content.endswith("\n"):
+                # This is an append operation on a file with a trailing newline
+                # Insert before the empty string that represents the trailing newline
+                # to avoid creating an extra blank line
+                lines.insert(num_lines - 1, args.new_str)
+            else:
+                lines.insert(zero_index, args.new_str)
 
-        # Perform the insertion using list.insert
-        lines.insert(zero_index, args.new_str)
+            new_content = "\n".join(lines)
 
-        # Join lines back together with newline
-        new_content = "\n".join(lines)
-
-        # Save to edit history before modification
+        # Common success path: save to history, write file, update view tracker
         self._push_history(str(resolved_path), old_content)
-
-        # Write the new content back to the file with UTF-8 encoding
         resolved_path.write_text(new_content, encoding="utf-8")
 
-        # Record view after successful insert if view_tracker is configured
         if self.config.view_tracker is not None:
             self.config.view_tracker.record_view(str(resolved_path))
 

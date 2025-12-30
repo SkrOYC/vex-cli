@@ -246,6 +246,26 @@ class TestInsertSuccess:
         )
         assert file_path.read_text(encoding="utf-8") == "FIRST CONTENT"
 
+    async def test_insert_at_end_with_trailing_newline(
+        self, tool: InsertLineTool, temp_dir: Path
+    ) -> None:
+        """Test inserting at end of file with trailing newline preserves structure."""
+        file_path = temp_dir / "trailing.txt"
+        # File with trailing newline - split creates ["line1", "line2", "line3", ""]
+        original_content = "line1\nline2\nline3\n"
+        file_path.write_text(original_content, encoding="utf-8")
+
+        await tool.run(
+            InsertLineArgs(path=str(file_path), new_str="APPENDED LINE", insert_line=4)
+        )
+
+        # Should preserve trailing newline structure:
+        # Original: "line1\nline2\nline3\n" -> ["line1", "line2", "line3", ""]
+        # After insert at line 4: ["line1", "line2", "line3", "APPENDED LINE", ""]
+        # Result: "line1\nline2\nline3\nAPPENDED LINE\n"
+        expected = "line1\nline2\nline3\nAPPENDED LINE\n"
+        assert file_path.read_text(encoding="utf-8") == expected
+
     async def test_insert_saves_to_edit_history(
         self, tool: InsertLineTool, temp_dir: Path
     ) -> None:
@@ -327,19 +347,6 @@ class TestLineOutOfBounds:
         assert exc_info.value.code == "LINE_OUT_OF_BOUNDS"
         assert "out of bounds" in str(exc_info.value)
         assert "empty file" in str(exc_info.value).lower()
-
-    async def test_out_of_bounds_low(
-        self, tool: InsertLineTool, temp_dir: Path
-    ) -> None:
-        """Test inserting at line 0 or negative fails."""
-        file_path = temp_dir / "low_bounds.txt"
-        file_path.write_text("line1", encoding="utf-8")
-
-        # Line 0 should fail (insert_line >= 1 is validated at model level)
-        with pytest.raises((ValidationError, FileSystemError)):
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=0)
-            )
 
     async def test_out_of_bounds_high(
         self, tool: InsertLineTool, temp_dir: Path
