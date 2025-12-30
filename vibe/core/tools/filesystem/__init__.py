@@ -5,6 +5,7 @@ This package provides shared types, error handling, and services for filesystem 
 
 from __future__ import annotations
 
+from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import (
     DEFAULT_CONTEXT_AFTER,
     DEFAULT_CONTEXT_BEFORE,
@@ -24,6 +25,11 @@ from vibe.core.tools.filesystem.types import (
     STR_REPLACE_LENGTH_RATIO_THRESHOLD,
     FileSystemError,
     ValidationError,
+)
+from vibe.core.tools.filesystem.write_file import (
+    WriteFileArgs,
+    WriteFileResult,
+    WriteFileTool,
 )
 
 __all__ = [
@@ -45,4 +51,8 @@ __all__ = [
     "STR_REPLACE_LENGTH_RATIO_THRESHOLD",
     "FileSystemError",
     "ValidationError",
+    "ViewTrackerService",
+    "WriteFileArgs",
+    "WriteFileResult",
+    "WriteFileTool",
 ]
