@@ -6,11 +6,18 @@ heavy engine dependencies that may not be available in all environments.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
+from vibe.core.tools.filesystem.grep import (
+    GrepArgs,
+    GrepResult,
+    GrepTool,
+    GrepToolConfig,
+    GrepToolState,
+)
 from vibe.core.tools.filesystem.list_files import (
     ListFilesArgs,
     ListFilesResult,
@@ -49,15 +56,35 @@ def tool(
     return ListFilesTool(config=tool_config, state=tool_state)
 
 
+# =============================================================================
+# GrepTool Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def grep_tool(temp_dir: Path) -> GrepTool:
+    """Create a GrepTool instance for testing.
+
+    Uses the same temp_dir as the test to ensure file visibility.
+    """
+    return GrepTool(config=GrepToolConfig(workdir=temp_dir), state=GrepToolState())
+
+
 # Re-export commonly used classes for convenience
 __all__ = [
+    "GrepArgs",
+    "GrepResult",
+    "GrepTool",
+    "GrepToolConfig",
+    "GrepToolState",
     "ListFilesArgs",
     "ListFilesResult",
     "ListFilesTool",
     "ListFilesToolConfig",
     "ListFilesToolState",
+    "grep_tool",
     "temp_dir",
+    "tool",
     "tool_config",
     "tool_state",
-    "tool",
 ]
