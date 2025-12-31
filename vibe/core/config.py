@@ -285,6 +285,7 @@ class VibeConfig(BaseSettings):
     displayed_workdir: str = ""
     auto_compact_threshold: int = 200_000
     context_warnings: bool = False
+    agent_logging_enabled: bool = True
     max_price: float | None = None
     textual_theme: str = "textual-dark"
     instructions: str = ""

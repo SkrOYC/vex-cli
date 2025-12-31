@@ -105,8 +105,9 @@ pythonVersion = "3.12"
 reportMissingTypeStubs = false
 reportPrivateImportUsage = false
 include = ["vibe/**/*.py", "tests/**/*.py"]
-venvPath = "."
-venv = ".venv"
+# Use system Python in nix environments (no venv needed)
+venvPath = ""
+venv = ""
 
 [tool.ruff]
 include = ["vibe/**/*.py", "tests/**/*.py"]

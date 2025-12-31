@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from typing import cast
+from unittest.mock import patch, MagicMock
 
 from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
@@ -10,6 +12,7 @@ import pytest
 
 from vibe.core.engine.langchain_middleware import (
     ContextWarningMiddleware,
+    LoggerMiddleware,
     PriceLimitMiddleware,
 )
 
@@ -276,3 +279,308 @@ class TestPriceLimitMiddleware:
 
         result = middleware.before_model(state, cast(Runtime, None))
         assert result is None
+
+
+class TestLoggerMiddleware:
+    """Test LoggerMiddleware functionality."""
+
+    def test_before_agent_logs_session_start(self):
+        """Test that before_agent logs session start."""
+        middleware = LoggerMiddleware(enabled=True)
+
+        # Mock runtime with session_id
+        runtime = type("Runtime", (), {"session_id": "test-session"})()
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            result = middleware.before_agent({}, runtime)
+            assert result is None
+            mock_logger.info.assert_called_once_with(
+                "[SESSION START] Agent session test-session initiated"
+            )
+
+    def test_after_agent_logs_session_end(self):
+        """Test that after_agent logs session end."""
+        middleware = LoggerMiddleware(enabled=True)
+        runtime = type("Runtime", (), {"session_id": "test-session"})()
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            result = middleware.after_agent({}, runtime)
+            assert result is None
+            mock_logger.info.assert_called_once_with(
+                "[SESSION END] Agent session test-session completed"
+            )
+
+    def test_before_agent_disabled(self):
+        """Test that logging is disabled when enabled=False."""
+        from unittest.mock import patch
+
+        middleware = LoggerMiddleware(enabled=False)
+        runtime = type("Runtime", (), {"session_id": "test-session"})()
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            result = middleware.before_agent({}, runtime)
+            assert result is None
+            mock_logger.info.assert_not_called()
+
+    def test_wrap_model_call_logs_request_and_response(self):
+        """Test wrap_model_call logs request and response."""
+        from unittest.mock import patch, MagicMock
+        from langchain_core.messages import AIMessage
+
+        middleware = LoggerMiddleware(enabled=True)
+
+        # Mock model request
+        mock_model = MagicMock()
+        mock_model.model_name = "test-model"
+        request = MagicMock()
+        request.model = mock_model
+        request.messages = ["msg1", "msg2", "msg3"]
+        request.tools = [{"name": "tool1"}, {"name": "tool2"}]
+
+        # Mock response
+        mock_response = MagicMock()
+        mock_response.result = [
+            AIMessage(
+                content="test",
+                usage_metadata={
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "total_tokens": 150,
+                },
+            )
+        ]
+        mock_response.structured_response = None
+
+        def mock_handler(req):
+            return mock_response
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            result = middleware.wrap_model_call(request, mock_handler)
+            assert result == mock_response
+
+            # Check request logging
+            request_call = mock_logger.info.call_args_list[0]
+            assert (
+                "[MODEL REQUEST] Model: test-model, Messages: 3, Tools: 2"
+                in request_call[0][0]
+            )
+
+            # Check response logging
+            response_call = mock_logger.info.call_args_list[1]
+            assert "input=100, output=50, total=150" in response_call[0][0]
+
+    def test_wrap_model_call_with_structured_response(self):
+        """Test wrap_model_call logs structured response."""
+        from unittest.mock import patch, MagicMock
+        from langchain_core.messages import AIMessage
+
+        middleware = LoggerMiddleware(enabled=True)
+
+        mock_model = MagicMock()
+        mock_model.model_name = "test-model"
+        request = MagicMock()
+        request.model = mock_model
+        request.messages = ["msg"]
+        request.tools = []
+
+        mock_response = MagicMock()
+        mock_response.result = [AIMessage(content="test")]
+        mock_response.structured_response = {"key": "value"}
+
+        def mock_handler(req):
+            return mock_response
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            middleware.wrap_model_call(request, mock_handler)
+
+            # Check structured response logging
+            found_log = any(
+                "Structured response" in call.args[0]
+                for call in mock_logger.info.call_args_list
+            )
+            assert found_log, "Structured response log message not found."
+
+    def test_wrap_model_call_no_usage_metadata(self):
+        """Test wrap_model_call when no usage metadata."""
+        from unittest.mock import patch, MagicMock
+        from langchain_core.messages import AIMessage
+
+        middleware = LoggerMiddleware(enabled=True)
+
+        mock_model = MagicMock()
+        mock_model.model_name = "test-model"
+        request = MagicMock()
+        request.model = mock_model
+        request.messages = ["msg"]
+        request.tools = []
+
+        mock_response = MagicMock()
+        mock_response.result = [AIMessage(content="test")]
+        mock_response.structured_response = None
+
+        def mock_handler(req):
+            return mock_response
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            middleware.wrap_model_call(request, mock_handler)
+
+            # Check no usage message
+            found_log = any(
+                "No usage metadata available" in call.args[0]
+                for call in mock_logger.info.call_args_list
+            )
+            assert found_log, "No usage metadata log message not found."
+
+    def test_wrap_model_call_disabled(self):
+        """Test wrap_model_call when disabled."""
+        from unittest.mock import patch, MagicMock
+
+        middleware = LoggerMiddleware(enabled=False)
+        request = MagicMock()
+        response = MagicMock()
+
+        def mock_handler(req):
+            return response
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            result = middleware.wrap_model_call(request, mock_handler)
+            assert result == response
+            mock_logger.info.assert_not_called()
+
+    def test_wrap_tool_call_logs_execution(self):
+        """Test wrap_tool_call logs tool execution."""
+        from unittest.mock import patch, MagicMock
+
+        middleware = LoggerMiddleware(enabled=True)
+
+        request = MagicMock()
+        request.tool_call = {"name": "test_tool", "arguments": {"param": "value"}}
+
+        mock_result = MagicMock()
+        mock_result.content = "tool result"
+
+        def mock_handler(req):
+            return mock_result
+
+        with (
+            patch("vibe.core.engine.langchain_middleware.logger") as mock_logger,
+            patch(
+                "vibe.core.engine.langchain_middleware.isinstance", return_value=True
+            ) as mock_isinstance,
+        ):
+            result = middleware.wrap_tool_call(request, mock_handler)
+            assert result == mock_result
+
+            # Check tool call logging
+            call_log = mock_logger.info.call_args_list[0]
+            assert "[TOOL CALL] test_tool" in call_log[0][0]
+            assert "param" in call_log[0][0]
+
+            # Check result logging
+            result_log = mock_logger.info.call_args_list[1]
+            assert "[TOOL RESULT] test_tool: tool result" in result_log[0][0]
+
+    def test_wrap_tool_call_truncates_large_result(self):
+        """Test wrap_tool_call truncates large results."""
+        from unittest.mock import patch, MagicMock
+
+        middleware = LoggerMiddleware(enabled=True)
+
+        request = MagicMock()
+        request.tool_call = {"name": "test_tool", "arguments": {}}
+
+        mock_result = MagicMock()
+        mock_result.content = "x" * 300  # Large content
+
+        def mock_handler(req):
+            return mock_result
+
+        with (
+            patch("vibe.core.engine.langchain_middleware.logger") as mock_logger,
+            patch(
+                "vibe.core.engine.langchain_middleware.isinstance", return_value=True
+            ),
+        ):
+            middleware.wrap_tool_call(request, mock_handler)
+
+            result_log = mock_logger.info.call_args_list[1]
+            logged_content = result_log[0][0]
+            assert len(logged_content) <= 250  # Allow for prefix
+            assert logged_content.endswith("...")
+
+    def test_wrap_tool_call_no_content_attribute(self):
+        """Test wrap_tool_call handles results without content attribute."""
+        from unittest.mock import patch, MagicMock
+
+        middleware = LoggerMiddleware(enabled=True)
+
+        request = MagicMock()
+        request.tool_call = {"name": "test_tool", "arguments": {}}
+
+        mock_result = "plain string result"  # No content attribute
+
+        def mock_handler(req):
+            return mock_result
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            result = middleware.wrap_tool_call(request, mock_handler)
+            assert result == mock_result
+
+            result_log = mock_logger.info.call_args_list[1]
+            assert "plain string result" in result_log[0][0]
+
+    def test_model_call_error_handling(self):
+        """Test model call error handling."""
+        from unittest.mock import patch, MagicMock
+
+        middleware = LoggerMiddleware(enabled=True)
+        request = MagicMock()
+        request.model = MagicMock()
+        request.model.model_name = "test-model"
+        request.messages = []
+        request.tools = []
+
+        def failing_handler(req):
+            raise ValueError("Test error")
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            with pytest.raises(ValueError, match="Test error"):
+                middleware.wrap_model_call(request, failing_handler)
+
+            error_log = mock_logger.error.call_args_list[0]
+            assert "Model call failed" in error_log[0][0]
+
+    def test_tool_call_error_handling(self):
+        """Test tool call error handling."""
+        from unittest.mock import patch, MagicMock
+
+        middleware = LoggerMiddleware(enabled=True)
+        request = MagicMock()
+        request.tool_call = {"name": "test_tool", "arguments": {}}
+
+        def failing_handler(req):
+            raise RuntimeError("Tool failed")
+
+        with patch("vibe.core.engine.langchain_middleware.logger") as mock_logger:
+            with pytest.raises(RuntimeError, match="Tool failed"):
+                middleware.wrap_tool_call(request, failing_handler)
+
+            error_log = mock_logger.error.call_args_list[0]
+            assert "test_tool failed" in error_log[0][0]
+
+    def test_truncate_result(self):
+        """Test _truncate_result method."""
+        middleware = LoggerMiddleware()
+
+        # Short result
+        assert middleware._truncate_result("short") == "short"
+
+        # Long result
+        long_result = "x" * 300
+        truncated = middleware._truncate_result(long_result)
+        assert len(truncated) == 203  # 200 + "..."
+        assert truncated.endswith("...")
+
+        # Exact length
+        exact = "x" * 200
+        assert middleware._truncate_result(exact) == exact

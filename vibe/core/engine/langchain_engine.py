@@ -17,6 +17,7 @@ from langgraph.types import Command
 from vibe.core.config import VibeConfig
 from vibe.core.engine.langchain_middleware import (
     ContextWarningMiddleware,
+    LoggerMiddleware,
     PriceLimitMiddleware,
 )
 from vibe.core.engine.state import VibeAgentState
@@ -163,6 +164,9 @@ class VibeLangChainEngine:
                     description_prefix="Tool execution requires approval",
                 )
             )
+
+        # Logger middleware for observability
+        middleware.append(LoggerMiddleware(enabled=self.config.agent_logging_enabled))
 
         return middleware
 
