@@ -121,17 +121,6 @@ class TestLangChainApprovalWorkflow:
         return langchain_config
 
     @pytest.mark.asyncio
-    async def test_approval_callback_registration(self, config: VibeConfig):
-        """Test that approval callback is properly registered."""
-
-        async def mock_approval_callback(request):
-            return {"approved": True, "feedback": None}
-
-        engine = VibeLangChainEngine(config, approval_callback=mock_approval_callback)
-
-        assert engine.approval_callback is not None
-
-    @pytest.mark.asyncio
     async def test_handle_approval_no_agent(self, config: VibeConfig):
         """Test handle_approval with no agent doesn't raise."""
         engine = VibeLangChainEngine(config)
@@ -139,22 +128,6 @@ class TestLangChainApprovalWorkflow:
         # Should not raise even with no agent
         await engine.handle_approval(True, "test-feedback")
         await engine.handle_approval(False, "rejected")
-
-    @pytest.mark.asyncio
-    async def test_resume_execution_no_agent(self, config: VibeConfig):
-        """Test resume_execution with no agent doesn't raise."""
-        engine = VibeLangChainEngine(config)
-
-        # Should not raise
-        await engine.resume_execution({"approved": True})
-
-    @pytest.mark.asyncio
-    async def test_reject_execution_no_agent(self, config: VibeConfig):
-        """Test reject_execution with no agent doesn't raise."""
-        engine = VibeLangChainEngine(config)
-
-        # Should not raise
-        await engine.reject_execution({"approved": False, "feedback": "rejected"})
 
 
 class TestLangChainStateManagement:

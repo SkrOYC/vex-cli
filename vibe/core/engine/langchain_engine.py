@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from typing import Any
 from uuid import uuid4
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain.agents.middleware.human_in_the_loop import HITLResponse
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
@@ -77,11 +78,8 @@ class VibeLangChainEngine:
     def __init__(
         self,
         config: VibeConfig,
-        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
-        | None = None,
     ) -> None:
         self.config = config
-        self.approval_callback = approval_callback
         self._agent: CompiledStateGraph | None = None
         self._checkpointer = InMemorySaver()
         self._thread_id = f"vibe-session-{uuid4()}"
@@ -217,33 +215,32 @@ class VibeLangChainEngine:
     async def handle_approval(
         self, approved: bool, feedback: str | None = None
     ) -> None:
-        """Handle approval decision from TUI."""
+        """Handle approval decision from TUI using native HITL format.
+
+        Args:
+            approved: True to approve, False to reject
+            feedback: Optional feedback message for rejections
+        """
         if self._agent is None:
             return
 
         config: RunnableConfig = {"configurable": {"thread_id": self._thread_id}}
 
+        # Build HITLResponse with proper Decision format
         if approved:
-            await self._agent.ainvoke(
-                Command(resume={"approved": True, "feedback": feedback}), config=config
-            )
+            hitl_response = HITLResponse(decisions=[{"type": "approve"}])
         else:
-            await self._agent.ainvoke(
-                Command(resume={"approved": False, "feedback": feedback}), config=config
+            hitl_response = HITLResponse(
+                decisions=[
+                    {
+                        "type": "reject",
+                        "message": feedback or "Operation rejected by user",
+                    }
+                ]
             )
 
-    async def resume_execution(self, decision: dict[str, Any]) -> None:
-        """Resume execution after approval."""
-        await self.handle_approval(
-            approved=decision.get("approved", False), feedback=decision.get("feedback")
-        )
-
-    async def reject_execution(self, decision: dict[str, Any]) -> None:
-        """Reject execution and abort operation."""
-        await self.handle_approval(
-            approved=False,
-            feedback=decision.get("feedback", "Operation rejected by user"),
-        )
+        # Resume with HITLResponse
+        await self._agent.ainvoke(Command(resume=hitl_response), config=config)
 
     def reset(self) -> None:
         """Reset conversation state."""

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 from typing import cast
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
@@ -324,7 +323,8 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_logs_request_and_response(self):
         """Test wrap_model_call logs request and response."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
+
         from langchain_core.messages import AIMessage
 
         middleware = LoggerMiddleware(enabled=True)
@@ -371,7 +371,8 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_with_structured_response(self):
         """Test wrap_model_call logs structured response."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
+
         from langchain_core.messages import AIMessage
 
         middleware = LoggerMiddleware(enabled=True)
@@ -402,7 +403,8 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_no_usage_metadata(self):
         """Test wrap_model_call when no usage metadata."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
+
         from langchain_core.messages import AIMessage
 
         middleware = LoggerMiddleware(enabled=True)
@@ -433,7 +435,7 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_disabled(self):
         """Test wrap_model_call when disabled."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         middleware = LoggerMiddleware(enabled=False)
         request = MagicMock()
@@ -449,7 +451,7 @@ class TestLoggerMiddleware:
 
     def test_wrap_tool_call_logs_execution(self):
         """Test wrap_tool_call logs tool execution."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         middleware = LoggerMiddleware(enabled=True)
 
@@ -482,7 +484,7 @@ class TestLoggerMiddleware:
 
     def test_wrap_tool_call_truncates_large_result(self):
         """Test wrap_tool_call truncates large results."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         middleware = LoggerMiddleware(enabled=True)
 
@@ -510,7 +512,7 @@ class TestLoggerMiddleware:
 
     def test_wrap_tool_call_no_content_attribute(self):
         """Test wrap_tool_call handles results without content attribute."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         middleware = LoggerMiddleware(enabled=True)
 
@@ -531,7 +533,7 @@ class TestLoggerMiddleware:
 
     def test_model_call_error_handling(self):
         """Test model call error handling."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         middleware = LoggerMiddleware(enabled=True)
         request = MagicMock()
@@ -552,7 +554,7 @@ class TestLoggerMiddleware:
 
     def test_tool_call_error_handling(self):
         """Test tool call error handling."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         middleware = LoggerMiddleware(enabled=True)
         request = MagicMock()
