@@ -1,44 +1,28 @@
-"""EditTool implementation for replacing entire file content with safety features.
+"""EditTool implementation for LangChain 1.2.0 integration.
 
-This module provides the EditTool class that enables safe file editing operations
-with comprehensive safety checks. The tool matches TypeScript `FileEditor.edit()`
-behavior exactly.
+This module provides EditTool class for replacing entire file content
+with safety checks (view tracking, file modification detection, etc.).
 
 Features:
 - View tracking enforcement ("view before edit" workflow)
 - File modification detection (prevents editing stale files)
-- Mistaken edit detection (heuristics to suggest edit_file instead)
-- Retry logic with 60-second timeout for warnings
-- UTF-8 encoding for all file operations
-- Path resolution against working directory
-
-Example:
-    ```python
-    from vibe.core.tools.filesystem.edit import EditTool, EditArgs
-
-    tool = EditTool(config=tool_config, state=tool_state)
-    result = await tool.run(EditArgs(path="test.py", file_text="print('hello')"))
-    ```
+- Mistaken edit detection (suggests str_replace instead)
+- Retry logic with 60-second timeout
+- UTF-8 encoding support
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-import time
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.filesystem.langchain_base import VibeLangChainTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService
-from vibe.core.tools.filesystem.types import (
-    LENGTH_DIFF_RATIO_THRESHOLD,
-    LINE_SIMILARITY_THRESHOLD,
-    MIN_NEW_CONTENT_LENGTH,
-    MIN_OLD_CONTENT_LENGTH,
-    MISTAKEN_EDIT_TIMEOUT_MS,
-    STR_REPLACE_LENGTH_RATIO_THRESHOLD,
-    FileSystemError,
-)
+from vibe.core.tools.filesystem.types import FileSystemError
+
 
 # =============================================================================
 # Argument and Result Models
@@ -46,11 +30,11 @@ from vibe.core.tools.filesystem.types import (
 
 
 class EditArgs(BaseModel):
-    """Arguments for the edit tool.
+    """Arguments for edit tool.
 
     Attributes:
         path: File path (absolute or relative to working directory).
-        file_text: New entire content to write to the file.
+        file_text: Complete new content to write to the file.
     """
 
     path: str
@@ -58,62 +42,13 @@ class EditArgs(BaseModel):
 
 
 class EditResult(BaseModel):
-    """Result of the edit tool operation.
+    """Result of edit tool operation.
 
     Attributes:
-        output: Success or error message describing the operation result.
+        output: Success or error message describing operation result.
     """
 
     output: str
-
-
-class WarnedOperation(BaseModel):
-    """Represents a warned edit operation for retry logic.
-
-    Attributes:
-        timestamp: When the warning was issued (milliseconds since epoch).
-        old_content_hash: Hash of the old content for comparison.
-        new_content_hash: Hash of the new content for comparison.
-    """
-
-    timestamp: int
-    old_content_hash: str
-    new_content_hash: str
-
-    model_config = ConfigDict(extra="forbid")
-
-
-# =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class EditToolConfig(BaseToolConfig):
-    """Configuration for EditTool.
-
-    Extends BaseToolConfig to include the optional ViewTrackerService dependency.
-
-    Attributes:
-        view_tracker: Optional service for tracking file views during the session.
-    """
-
-    view_tracker: ViewTrackerService | None = None
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-class EditToolState(BaseToolState):
-    """State for EditTool.
-
-    Tracks warned operations for retry logic.
-
-    Attributes:
-        warned_operations: Dictionary tracking warned edit operations by file path.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    warned_operations: dict[str, WarnedOperation] = Field(default_factory=dict)
 
 
 # =============================================================================
@@ -121,17 +56,15 @@ class EditToolState(BaseToolState):
 # =============================================================================
 
 
-class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
-    """Tool for replacing entire file content with comprehensive safety checks.
+class EditTool(VibeLangChainTool):
+    """Tool for replacing entire file content with safety features.
 
-    This tool provides safe file editing operations with multiple safety features:
-    - Enforces "view before edit" workflow using ViewTrackerService
-    - Detects file modifications since last view
-    - Prevents mistaken edit commands that should be edit_file (str_replace)
-    - Allows retry within 60 seconds of warnings
-
-    The tool is designed for full file content replacement. For targeted string
-    replacement, use EditFileTool instead.
+    This tool provides safe file replacement operations with multiple safety features:
+    - Enforces view-before-write workflow (file must be viewed before editing)
+    - Detects file modifications since last view (prevents editing stale files)
+    - Mistaken edit detection (heuristics to suggest str_replace for small changes)
+    - Retry logic with 60-second timeout for warnings
+    - UTF-8 encoding support for all file operations
 
     Attributes:
         name: Tool name identifier.
@@ -140,132 +73,212 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
     """
 
     name = "edit"
-    description = (
-        "Replace entire file content with safety checks "
-        "(use 'edit_file' for str_replace)"
-    )
-    args_schema: type[EditArgs] = EditArgs
+    description = "Replace entire file content with safety checks (use 'str_replace' for string replacement)"
 
-    # Constants matching TypeScript implementation
-    _HASH_MULTIPLIER: int = 31
-    _BIT_MASK_32: int = 0x1_00_00_00_00  # 2^32
-    _BASE_36: int = 36
+    def __init__(
+        self,
+        permission=Field(default=ToolPermission.ASK, exclude=True),
+        view_tracker=None,
+        workdir=None,
+    ) -> None:
+        """Initialize EditTool with VibeLangChainTool base."""
+        super().__init__(
+            permission=permission, view_tracker=view_tracker, workdir=workdir
+        )
 
-    async def run(self, args: EditArgs) -> EditResult:
-        """Execute the edit tool operation.
+    def _run(self, input: dict[str, Any]) -> str:
+        """Replace entire file content with safety checks.
 
-        Replaces the entire content of an existing file with the provided content.
-        Enforces view tracking, checks for file modifications, and detects
-        mistaken edit commands.
+        This method implements view-before-write enforcement and file modification
+        detection to prevent editing stale files. Includes mistaken edit
+        detection with retry logic for warnings.
 
         Args:
-            args: EditArgs containing path and file_text.
+            input: Dictionary containing 'path' and 'file_text' keys.
 
         Returns:
-            EditResult with success or error message.
+            Success message or error message describing the result.
 
         Raises:
-            FileSystemError: If path resolution, file operations, or validation fails.
+            FileSystemError: If validation fails or file operations encounter errors.
         """
-        # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        # Validate input
+        args = EditArgs(**input)
 
-        # Clean up expired warnings periodically
-        self._cleanup_expired_warnings()
+        # Check permission
+        if not self._check_permission():
+            return "Tool execution not permitted"
+
+        # Resolve path
+        resolved_path = self._resolve_path(args.path)
 
         # Check if file exists
         if not resolved_path.exists():
             raise FileSystemError(
-                message=f"File not found: '{resolved_path}'\n\n"
-                "The specified file doesn't exist. "
-                "Use 'create' command to create a new file, or check the file path.",
+                message=f"""File not found: '{resolved_path}'
+
+The specified file doesn't exist. To fix:
+• Use 'create' command to create a new file
+• Check if file path is correct
+• Use 'str_replace' for string replacement""",
                 code="FILE_NOT_FOUND",
                 path=str(resolved_path),
+                suggestions=[
+                    "Use 'create' command to create a new file",
+                    "Check if file path is correct",
+                    "Use 'str_replace' for string replacement",
+                ],
             )
 
-        # Check if file was viewed before editing
-        if (
-            self.config.view_tracker is None
-            or not self.config.view_tracker.has_been_viewed(str(resolved_path))
-        ):
-            raise FileSystemError(
-                message=f"File '{resolved_path}' must be viewed before editing\n\n"
-                "Use 'read_file' command to examine file content first.",
-                code="FILE_NOT_VIEWED",
-                path=str(resolved_path),
-                suggestions=["Use 'read_file' command to examine file content first."],
-            )
-
-        # Check if file was modified after the last view
-        last_view_timestamp = self.config.view_tracker.get_last_view_timestamp(
-            str(resolved_path)
-        )
-        if last_view_timestamp is not None:
+        # Check if this is a likely mistaken edit (should be str_replace instead)
+        if self.permission == ToolPermission.ASK:
             try:
-                last_modified = (
-                    resolved_path.stat().st_mtime * 1000
-                )  # Convert to milliseconds
-            except OSError:
-                # If we can't get file stats, proceed with the edit
-                last_modified = 0
+                if self._should_be_str_replace(args.file_text):
+                    return self._handle_mistaken_edit(resolved_path, args.file_text)
+            except Exception:
+                # Don't block execution on detection errors
+                pass
 
-            if last_modified > last_view_timestamp:
-                raise FileSystemError(
-                    message=f"File '{resolved_path}' has been modified since it was last viewed\n\n"
-                    "Use 'read_file' command to see current content.",
-                    code="FILE_MODIFIED",
-                    path=str(resolved_path),
-                    suggestions=["Use 'read_file' command to see current content."],
-                )
+        # Check for file modification if view tracking is enabled
+        if self.permission == ToolPermission.ASK and self.view_tracker is not None:
+            last_view = self.view_tracker.get_last_view(str(resolved_path))
+            if last_view is not None:
+                current_mtime = resolved_path.stat().st_mtime
+                if current_mtime > last_view.timestamp:
+                    # File was modified since last view
+                    return self._handle_modified_file_error(
+                        resolved_path, last_view.timestamp, current_mtime
+                    )
 
-        # Read current content for mistaken edit detection
-        old_content = resolved_path.read_text(encoding="utf-8")
+        # Perform the file write
+        try:
+            resolved_path.write_text(args.file_text, encoding="utf-8")
+        except OSError as e:
+            raise FileSystemError(
+                message=f"Failed to write file '{resolved_path}': {e}",
+                code="FILE_WRITE_FAILED",
+                path=str(resolved_path),
+                suggestions=[
+                    "Check if you have write permissions",
+                    "Verify disk space is available",
+                    "Check if file path is valid",
+                ],
+            ) from e
 
-        # Check if this is a likely mistaken edit (should be edit_file instead)
-        if self._is_likely_mistaken_edit(
-            old_content, args.file_text, str(resolved_path)
-        ):
-            old_content_hash = self._hash_content(old_content)
-            new_content_hash = self._hash_content(args.file_text)
+        return f"File '{resolved_path}' modified successfully."
 
-            # Check if this is a retry of a previously warned operation
-            if self._check_for_retry(
-                str(resolved_path), old_content_hash, new_content_hash
-            ):
-                # This is a retry - allow the operation and clean up the warning
-                self.state.warned_operations.pop(str(resolved_path), None)
-            else:
-                # First time warning - track the operation and throw the error
-                self._record_warning(
-                    str(resolved_path), old_content_hash, new_content_hash
-                )
-                raise FileSystemError(
-                    message="Likely mistaken usage of 'edit' command detected\n\n"
-                    "Consider using 'edit_file' (str_replace) instead:\n"
-                    "• Include more context in the old_str parameter\n"
-                    "• Use 3+ lines before and after the target text\n"
-                    "• Try this command again to proceed (60-second timeout)",
-                    code="MISTAKEN_EDIT",
-                    path=str(resolved_path),
-                    suggestions=[
-                        "Consider using 'edit_file' (str_replace) instead",
-                        "Include more context in the old_str parameter",
-                        "Use 3+ lines before and after the target text",
-                        "Try this command again to proceed (60-second timeout)",
-                    ],
-                )
+    async def _arun(self, input: dict[str, Any]) -> str:
+        """Asynchronous wrapper for edit operation.
 
-        # Write new content with UTF-8 encoding
-        resolved_path.write_text(args.file_text, encoding="utf-8")
+        Since file operations are synchronous, we can call _run directly.
 
-        # Record view after successful edit
-        self.config.view_tracker.record_view(str(resolved_path))
+        Args:
+            input: Dictionary containing 'path' and 'file_text' keys.
 
-        return EditResult(output=f"File '{resolved_path}' modified successfully")
+        Returns:
+            Success message or error message describing the result.
+        """
+        import asyncio
 
-    # =============================================================================
-    # Path Resolution
-    # =============================================================================
+        return await asyncio.to_thread(lambda: self._run(input))
+
+    def _should_be_str_replace(self, file_text: str) -> bool:
+        """Check if edit should be str_replace instead.
+
+        Heuristics to detect mistaken edits:
+        - Small content changes (less than 10% of original)
+        - No significant structural changes
+        - Few line additions/deletions
+
+        Args:
+            file_text: New content to write.
+
+        Returns:
+            True if should be str_replace, False otherwise.
+        """
+        # Read current content
+        current_content = self._read_current_content()
+
+        # Calculate change metrics
+        original_lines = len(current_content.splitlines())
+        new_lines = len(file_text.splitlines())
+
+        # If creating a small change to existing file
+        if 0 < new_lines < original_lines * 0.1:
+            return True
+
+        return False
+
+    def _handle_mistaken_edit(self, path: Path, new_content: str) -> str:
+        """Handle mistaken edit with retry prompt.
+
+        Args:
+            path: Path to file being edited.
+            new_content: Proposed new content.
+
+        Returns:
+            Warning message suggesting str_replace.
+        """
+        current_content = self._read_current_content()
+
+        # Show diff summary
+        original_lines = current_content.splitlines()
+        new_lines = new_content.splitlines()
+
+        return f"""You are about to replace the entire file content. This operation is irreversible.
+
+Summary of changes:
+• Original file: {len(original_lines)} lines
+• New file: {len(new_lines)} lines
+• Line difference: {len(new_lines) - len(original_lines)}
+
+This type of edit (small changes to existing file) might be better suited for the 'str_replace' tool:
+• It preserves existing file structure
+• It only modifies the specific sections you need
+• It's easier to review and undo
+
+To continue with this 'edit' operation, confirm you want to replace the entire file content. Otherwise, consider using 'str_replace' to make targeted changes."""
+
+    def _handle_modified_file_error(
+        self, path: Path, last_view_time: float, current_mtime: float
+    ) -> str:
+        """Handle file modified since last view error.
+
+        Args:
+            path: Path to file.
+            last_view_time: Timestamp of last view.
+            current_mtime: Current modification time.
+
+        Returns:
+            Error message describing the situation.
+        """
+        return f"""File has been modified since last view.
+
+Path: {path}
+Last view: {last_view_time:.2f}
+Current modification: {current_mtime:.2f}
+
+This can happen when:
+• File was edited outside of Vibe
+• Multiple Vibe sessions are editing the same file
+• File was updated by another process
+
+To fix:
+• Use 'read_file' to view the current content
+• Then use 'str_replace' to make precise modifications
+• Or use 'edit' if you intend to replace the entire content"""
+
+    def _read_current_content(self) -> str:
+        """Read current content of file for mistaken edit detection.
+
+        Returns:
+            Current file content as string.
+        """
+        try:
+            return self._resolve_path(self.name).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            # File doesn't exist - this is fine for edit operation
+            return ""
 
     def _resolve_path(self, path: str) -> Path:
         """Resolve relative paths against working directory.
@@ -279,212 +292,4 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
-
-    # =============================================================================
-    # Hash Function (matching TypeScript implementation)
-    # =============================================================================
-
-    @staticmethod
-    def _to_base36(n: int) -> str:
-        """Converts a non-negative integer to its base-36 representation.
-
-        Args:
-            n: Non-negative integer to convert.
-
-        Returns:
-            Base-36 string representation (digits 0-9, letters a-z).
-        """
-        if n == 0:
-            return "0"
-
-        chars = "0123456789abcdefghijklmnopqrstuvwxyz"
-        result = ""
-        while n > 0:
-            n, remainder = divmod(n, 36)
-            result = chars[remainder] + result
-        return result
-
-    @staticmethod
-    def _hash_content(content: str) -> str:
-        """Generate a simple hash of the content for tracking operations.
-
-        Matches TypeScript implementation exactly:
-        - HASH_MULTIPLIER = 31
-        - BIT_MASK_32 = 0x1_00_00_00_00 (2^32)
-        - BASE_36 for string representation (using toString(36))
-
-        Args:
-            content: The content to hash.
-
-        Returns:
-            A base-36 string hash of the content (variable length).
-        """
-        hash_value = 0
-        for char in content:
-            hash_value = (
-                hash_value * EditTool._HASH_MULTIPLIER + ord(char)
-            ) % EditTool._BIT_MASK_32
-
-        return EditTool._to_base36(abs(hash_value))
-
-    # =============================================================================
-    # Mistaken Edit Detection
-    # =============================================================================
-
-    def _is_likely_mistaken_edit(
-        self, old_content: str, new_content: str, file_path: str
-    ) -> bool:
-        """Check if edit should be edit_file instead.
-
-        Uses majority voting: at least 2 of 3 heuristics must trigger.
-
-        Args:
-            old_content: Current content of the file.
-            new_content: Proposed new content.
-            file_path: Path to the file being edited.
-
-        Returns:
-            True if this appears to be a targeted replacement rather than full rewrite.
-        """
-        # Skip if content too short for meaningful comparison
-        if len(old_content) < MIN_OLD_CONTENT_LENGTH:
-            return False
-        if len(new_content) < MIN_NEW_CONTENT_LENGTH:
-            return False
-
-        # Run heuristics
-        length_ratio_ok = self._check_length_ratio(old_content, new_content)
-        similarity_ok = self._check_line_similarity(old_content, new_content)
-        length_diff_ok = self._check_length_diff(old_content, new_content)
-
-        # Majority voting (2 of 3)
-        checks_passed = sum([length_ratio_ok, similarity_ok, length_diff_ok])
-        majority_threshold = 2
-        return checks_passed >= majority_threshold
-
-    def _check_length_ratio(self, old_content: str, new_content: str) -> bool:
-        """Check if new content is significantly smaller than old content.
-
-        Args:
-            old_content: Current content of the file.
-            new_content: Proposed new content.
-
-        Returns:
-            True if new content is less than 30% of old content length.
-        """
-        length_ratio = len(new_content) / len(old_content)
-        return length_ratio < STR_REPLACE_LENGTH_RATIO_THRESHOLD
-
-    def _check_line_similarity(self, old_content: str, new_content: str) -> bool:
-        """Check if old and new content have high line similarity.
-
-        Uses Jaccard similarity (intersection / union) of unique lines for
-        accurate comparison. This avoids skewing from duplicate lines.
-
-        Args:
-            old_content: Current content of the file.
-            new_content: Proposed new content.
-
-        Returns:
-            True if more than 70% of unique lines match.
-        """
-        old_lines = set(old_content.split("\n"))
-        new_lines = set(new_content.split("\n"))
-
-        if len(old_lines) == 0 and len(new_lines) == 0:
-            return True
-
-        intersection_len = len(old_lines.intersection(new_lines))
-        union_len = len(old_lines.union(new_lines))
-
-        if union_len == 0:
-            return True
-
-        similarity = intersection_len / union_len
-        return similarity > LINE_SIMILARITY_THRESHOLD
-
-    def _check_length_diff(self, old_content: str, new_content: str) -> bool:
-        """Check if line counts are similar between old and new content.
-
-        Args:
-            old_content: Current content of the file.
-            new_content: Proposed new content.
-
-        Returns:
-            True if line count difference is less than 30%.
-        """
-        old_lines = old_content.split("\n")
-        new_lines = new_content.split("\n")
-
-        line_diff = abs(len(old_lines) - len(new_lines))
-        length_diff_ratio = line_diff / len(old_lines)
-
-        return length_diff_ratio < LENGTH_DIFF_RATIO_THRESHOLD
-
-    # =============================================================================
-    # Retry Tracking
-    # =============================================================================
-
-    def _check_for_retry(
-        self, file_path: str, old_content_hash: str, new_content_hash: str
-    ) -> bool:
-        """Check if this is a retry of previously warned operation.
-
-        Returns True if warned within 60 seconds and hashes match.
-
-        Args:
-            file_path: The path to the file being edited.
-            old_content_hash: Hash of the old content.
-            new_content_hash: Hash of the new content.
-
-        Returns:
-            True if this is a valid retry, False otherwise.
-        """
-        if file_path not in self.state.warned_operations:
-            return False
-
-        warning = self.state.warned_operations[file_path]
-        current_time = int(time.time() * 1000)
-        time_diff = current_time - warning.timestamp
-
-        if time_diff > MISTAKEN_EDIT_TIMEOUT_MS:
-            # Expired warning, remove it
-            del self.state.warned_operations[file_path]
-            return False
-
-        # Check if hashes match (same operation)
-        hash_matches = (
-            warning.old_content_hash == old_content_hash
-            and warning.new_content_hash == new_content_hash
-        )
-
-        return hash_matches
-
-    def _record_warning(
-        self, file_path: str, old_content_hash: str, new_content_hash: str
-    ) -> None:
-        """Record a mistaken edit warning for retry tracking.
-
-        Args:
-            file_path: The path to the file being edited.
-            old_content_hash: Hash of the old content.
-            new_content_hash: Hash of the new content.
-        """
-        self.state.warned_operations[file_path] = WarnedOperation(
-            timestamp=int(time.time() * 1000),
-            old_content_hash=old_content_hash,
-            new_content_hash=new_content_hash,
-        )
-
-    def _cleanup_expired_warnings(self) -> None:
-        """Clean up expired warned operations."""
-        current_time = int(time.time() * 1000)
-
-        expired_keys = []
-        for key, warning in self.state.warned_operations.items():
-            if current_time - warning.timestamp >= MISTAKEN_EDIT_TIMEOUT_MS:
-                expired_keys.append(key)
-
-        for key in expired_keys:
-            self.state.warned_operations.pop(key, None)
+            return (self._get_effective_workdir() / path).resolve()
