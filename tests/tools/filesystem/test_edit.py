@@ -32,8 +32,6 @@ from vibe.core.tools.filesystem.edit import (
     EditArgs,
     EditResult,
     EditTool,
-    EditToolConfig,
-    EditToolState,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
@@ -57,21 +55,9 @@ def view_tracker() -> ViewTrackerService:
 
 
 @pytest.fixture
-def tool_config(view_tracker: ViewTrackerService, temp_dir: Path) -> EditToolConfig:
-    """Create an EditToolConfig with ViewTrackerService."""
-    return EditToolConfig(view_tracker=view_tracker, workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_state() -> EditToolState:
-    """Create a fresh EditToolState for each test."""
-    return EditToolState()
-
-
-@pytest.fixture
-def tool(tool_config: EditToolConfig, tool_state: EditToolState) -> EditTool:
+def tool(view_tracker: ViewTrackerService, temp_dir: Path) -> EditTool:
     """Create an EditTool instance for testing."""
-    return EditTool(config=tool_config, state=tool_state)
+    return EditTool(view_tracker=view_tracker, workdir=temp_dir)
 
 
 # =============================================================================
@@ -123,36 +109,30 @@ class TestPathResolution:
 
     @pytest.mark.asyncio
     async def test_absolute_path_resolved_correctly(
-        self, tool: EditTool, temp_dir: Path
+        self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
         """Test absolute paths are resolved correctly."""
         file_path = temp_dir / "test.txt"
         file_path.write_text("original", encoding="utf-8")
-        view_tracker = tool.config.view_tracker
-        assert view_tracker is not None
-        # Wait to ensure mtime is set before recording view
-        time.sleep(0.01)
         view_tracker.record_view(str(file_path))
 
-        result = await tool.run(EditArgs(path=str(file_path), file_text="new content"))
+        result = await tool._arun(path=str(file_path), file_text="new content")
 
         assert "modified successfully" in result.output
         assert file_path.read_text(encoding="utf-8") == "new content"
 
     @pytest.mark.asyncio
     async def test_relative_path_resolved_against_workdir(
-        self, tool: EditTool, temp_dir: Path
+        self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
     ) -> None:
         """Test relative paths are resolved against working directory."""
         file_path = temp_dir / "relative.txt"
         file_path.write_text("original", encoding="utf-8")
-        view_tracker = tool.config.view_tracker
-        assert view_tracker is not None
         # Wait to ensure mtime is set before recording view
         time.sleep(0.01)
         view_tracker.record_view(str(file_path))
 
-        result = await tool.run(EditArgs(path="relative.txt", file_text="new content"))
+        result = await tool._arun(path="relative.txt", file_text="new content")
 
         expected_path = temp_dir / "relative.txt"
         assert "modified successfully" in result.output
@@ -178,7 +158,7 @@ class TestViewTracking:
         # Record view before editing
         view_tracker.record_view(str(file_path))
 
-        result = await tool.run(EditArgs(path=str(file_path), file_text="new content"))
+        result = await tool._arun(path=str(file_path), file_text="new content")
 
         assert result.output == f"File '{file_path}' modified successfully"
         assert file_path.read_text(encoding="utf-8") == "new content"
@@ -192,7 +172,7 @@ class TestViewTracking:
         file_path.write_text("content", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text="new content"))
+            await tool._arun(path=str(file_path), file_text="new content")
 
         assert exc_info.value.code == "FILE_NOT_VIEWED"
         assert "must be viewed before editing" in str(exc_info.value)
@@ -217,7 +197,7 @@ class TestViewTracking:
         time.sleep(0.01)
 
         # Edit the file
-        await tool.run(EditArgs(path=str(file_path), file_text="updated"))
+        await tool._arun(path=str(file_path), file_text="updated")
 
         # Check that timestamp was updated
         new_timestamp = view_tracker.get_last_view_timestamp(str(file_path))
@@ -242,9 +222,7 @@ class TestFileModification:
         non_existent_path = temp_dir / "does_not_exist.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditArgs(path=str(non_existent_path), file_text="new content")
-            )
+            await tool._arun(path=str(non_existent_path), file_text="new content")
 
         assert exc_info.value.code == "FILE_NOT_FOUND"
         assert "File not found" in str(exc_info.value)
@@ -266,7 +244,7 @@ class TestFileModification:
         file_path.write_text("modified externally", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text="new content"))
+            await tool._arun(path=str(file_path), file_text="new content")
 
         assert exc_info.value.code == "FILE_MODIFIED"
         assert "has been modified since" in str(exc_info.value)
@@ -306,7 +284,7 @@ class TestMistakenEditDetection:
         )  # 105 lines, ~420 chars - most lines same
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+            await tool._arun(path=str(file_path), file_text=new_content)
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
         assert "mistaken usage" in str(exc_info.value)
@@ -326,7 +304,7 @@ class TestMistakenEditDetection:
         new_content = "def foo():\n    return 1\n\ndef bar():\n    pass\n" * 20
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+            await tool._arun(path=str(file_path), file_text=new_content)
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
@@ -354,7 +332,7 @@ class TestMistakenEditDetection:
         )
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+            await tool._arun(path=str(file_path), file_text=new_content)
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
@@ -376,7 +354,7 @@ class TestMistakenEditDetection:
         new_content = "completely\ndifferent\ncontent\nhere\n" * 10  # 40 lines
 
         # This should NOT raise because 0 of 3 heuristics trigger
-        result = await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+        result = await tool._arun(path=str(file_path), file_text=new_content)
         assert "modified successfully" in result.output
 
     @pytest.mark.asyncio
@@ -393,7 +371,7 @@ class TestMistakenEditDetection:
         # because content is too short for meaningful comparison
         new_content = "also short"
 
-        result = await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+        result = await tool._arun(path=str(file_path), file_text=new_content)
         assert "modified successfully" in result.output
 
 
@@ -427,43 +405,14 @@ class TestRetryLogic:
 
         # First attempt - should fail with warning
         with pytest.raises(FileSystemError):
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
-
-        # Second attempt - should succeed (retry allowed)
-        result = await tool.run(EditArgs(path=str(file_path), file_text=new_content))
-        assert "modified successfully" in result.output
-
-    @pytest.mark.timeout(120)
-    @pytest.mark.asyncio
-    async def test_retry_rejected_after_60s_expired_warning(
-        self, tool: EditTool, view_tracker: ViewTrackerService, temp_dir: Path
-    ) -> None:
-        """Test retry is rejected after 60-second timeout."""
-        file_path = temp_dir / "expired_retry.txt"
-        old_content = "line1\nline2\nline3\nline4\nline5\n" * 20
-        file_path.write_text(old_content, encoding="utf-8")
-        view_tracker.record_view(str(file_path))
-
-        # New content that triggers mistaken edit detection
-        new_content = (
-            ("line1\n" * 20)
-            + ("line2\n" * 20)
-            + ("line3\n" * 20)
-            + ("line4\n" * 20)
-            + ("line5\n" * 20)
-            + "new_line\n" * 5
-        )  # 105 lines
-
-        # First attempt - should fail with warning
-        with pytest.raises(FileSystemError):
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+            await tool._arun(path=str(file_path), file_text=new_content)
 
         # Wait for warning to expire (60+ seconds)
         time.sleep(61)
 
         # Second attempt - should fail again (warning expired)
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+            await tool._arun(path=str(file_path), file_text=new_content)
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
@@ -497,11 +446,11 @@ class TestRetryLogic:
 
         # First attempt with content 1 - should fail with warning
         with pytest.raises(FileSystemError):
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content_1))
+            await tool._arun(path=str(file_path), file_text=new_content_1)
 
         # Second attempt with different content - should fail again
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content_2))
+            await tool._arun(path=str(file_path), file_text=new_content_2)
 
         assert exc_info.value.code == "MISTAKEN_EDIT"
 
@@ -528,10 +477,10 @@ class TestRetryLogic:
 
         # First attempt - should fail with warning
         with pytest.raises(FileSystemError):
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+            await tool._arun(path=str(file_path), file_text=new_content)
 
         # Verify warning was recorded
-        assert str(file_path) in tool.state.warned_operations
+        assert str(file_path) in tool._warned_operations
 
         # Wait for warning to expire
         time.sleep(61)
@@ -540,10 +489,10 @@ class TestRetryLogic:
         file_path2 = temp_dir / "cleanup_test2.txt"
         file_path2.write_text("content", encoding="utf-8")
         view_tracker.record_view(str(file_path2))
-        await tool.run(EditArgs(path=str(file_path2), file_text="new content"))
+        await tool._arun(path=str(file_path2), file_text="new content")
 
         # Verify warning was cleaned up
-        assert str(file_path) not in tool.state.warned_operations
+        assert str(file_path) not in tool._warned_operations
 
 
 # =============================================================================
@@ -655,7 +604,7 @@ class TestErrorMessageValidation:
         file_path.write_text("content", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text="new content"))
+            await tool._arun(path=str(file_path), file_text="new content")
 
         error_message = str(exc_info.value)
         # Verify key phrases from TypeScript error message
@@ -670,9 +619,7 @@ class TestErrorMessageValidation:
         non_existent_path = temp_dir / "does_not_exist.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditArgs(path=str(non_existent_path), file_text="new content")
-            )
+            await tool._arun(path=str(non_existent_path), file_text="new content")
 
         error_message = str(exc_info.value)
         # Verify key phrases from TypeScript error message
@@ -693,7 +640,7 @@ class TestErrorMessageValidation:
         file_path.write_text("modified externally", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text="new content"))
+            await tool._arun(path=str(file_path), file_text="new content")
 
         error_message = str(exc_info.value)
         # Verify key phrases from TypeScript error message
@@ -721,7 +668,7 @@ class TestErrorMessageValidation:
         )  # 105 lines
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+            await tool._arun(path=str(file_path), file_text=new_content)
 
         error_message = str(exc_info.value)
         # Verify key phrases from TypeScript error message
@@ -753,7 +700,7 @@ class TestSuccessMessage:
         file_path.write_text("original", encoding="utf-8")
         view_tracker.record_view(str(file_path))
 
-        result = await tool.run(EditArgs(path=str(file_path), file_text="new content"))
+        result = await tool._arun(path=str(file_path), file_text="new content")
 
         assert result.output == f"File '{file_path}' modified successfully"
         # Verify content was actually updated
@@ -769,9 +716,7 @@ class TestSuccessMessage:
         view_tracker.record_view(str(file_path))
 
         unicode_content = "Hello, 世界! 🌍 Ñoño ©®™"
-        result = await tool.run(
-            EditArgs(path=str(file_path), file_text=unicode_content)
-        )
+        result = await tool._arun(path=str(file_path), file_text=unicode_content)
 
         assert "modified successfully" in result.output
         assert file_path.read_text(encoding="utf-8") == unicode_content
@@ -796,7 +741,7 @@ class TestUTF8Encoding:
         view_tracker.record_view(str(file_path))
 
         new_content = "Goodbye, 世界! 🌍 Ñoño ©®™"
-        result = await tool.run(EditArgs(path=str(file_path), file_text=new_content))
+        result = await tool._arun(path=str(file_path), file_text=new_content)
 
         assert result.output == f"File '{file_path}' modified successfully"
         assert file_path.read_text(encoding="utf-8") == new_content

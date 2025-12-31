@@ -28,8 +28,6 @@ from vibe.core.tools.filesystem.insert_line import (
     InsertLineArgs,
     InsertLineResult,
     InsertLineTool,
-    InsertLineToolConfig,
-    InsertLineToolState,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
@@ -53,39 +51,15 @@ def view_tracker() -> ViewTrackerService:
 
 
 @pytest.fixture
-def tool_config(
-    view_tracker: ViewTrackerService, temp_dir: Path
-) -> InsertLineToolConfig:
-    """Create an InsertLineToolConfig with ViewTrackerService."""
-    return InsertLineToolConfig(view_tracker=view_tracker, workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_config_no_view_tracker(temp_dir: Path) -> InsertLineToolConfig:
-    """Create an InsertLineToolConfig without ViewTrackerService."""
-    return InsertLineToolConfig(workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_state() -> InsertLineToolState:
-    """Create a fresh InsertLineToolState for each test."""
-    return InsertLineToolState()
-
-
-@pytest.fixture
-def tool(
-    tool_config: InsertLineToolConfig, tool_state: InsertLineToolState
-) -> InsertLineTool:
+def tool(view_tracker: ViewTrackerService, temp_dir: Path) -> InsertLineTool:
     """Create an InsertLineTool instance for testing."""
-    return InsertLineTool(config=tool_config, state=tool_state)
+    return InsertLineTool(view_tracker=view_tracker, workdir=temp_dir)
 
 
 @pytest.fixture
-def tool_no_view_tracker(
-    tool_config_no_view_tracker: InsertLineToolConfig, tool_state: InsertLineToolState
-) -> InsertLineTool:
+def tool_no_view_tracker(temp_dir: Path) -> InsertLineTool:
     """Create an InsertLineTool instance without ViewTrackerService for testing."""
-    return InsertLineTool(config=tool_config_no_view_tracker, state=tool_state)
+    return InsertLineTool(workdir=temp_dir)
 
 
 # =============================================================================
@@ -186,8 +160,8 @@ class TestInsertSuccess:
         original_content = "line2\nline3\nline4"
         file_path.write_text(original_content, encoding="utf-8")
 
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="NEW FIRST LINE", insert_line=1)
+        result = await tool._arun(
+            path=str(file_path), new_str="NEW FIRST LINE", insert_line=1
         )
 
         assert (
@@ -202,8 +176,8 @@ class TestInsertSuccess:
         original_content = "line1\nline2\nline3"
         file_path.write_text(original_content, encoding="utf-8")
 
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="NEW LAST LINE", insert_line=4)
+        result = await tool._arun(
+            path=str(file_path), new_str="NEW LAST LINE", insert_line=4
         )
 
         assert (
@@ -218,8 +192,8 @@ class TestInsertSuccess:
         original_content = "line1\nline2\nline3\nline4"
         file_path.write_text(original_content, encoding="utf-8")
 
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="INSERTED LINE", insert_line=3)
+        result = await tool._arun(
+            path=str(file_path), new_str="INSERTED LINE", insert_line=3
         )
 
         assert (
@@ -235,8 +209,8 @@ class TestInsertSuccess:
         file_path = temp_dir / "empty.txt"
         file_path.write_text("", encoding="utf-8")
 
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="FIRST CONTENT", insert_line=1)
+        result = await tool._arun(
+            path=str(file_path), new_str="FIRST CONTENT", insert_line=1
         )
 
         assert (
@@ -253,9 +227,7 @@ class TestInsertSuccess:
         original_content = "line1\nline2\nline3\n"
         file_path.write_text(original_content, encoding="utf-8")
 
-        await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="APPENDED LINE", insert_line=4)
-        )
+        await tool._arun(path=str(file_path), new_str="APPENDED LINE", insert_line=4)
 
         # Should preserve trailing newline structure:
         # Original: "line1\nline2\nline3\n" -> ["line1", "line2", "line3", ""]
@@ -272,13 +244,11 @@ class TestInsertSuccess:
         original_content = "original content"
         file_path.write_text(original_content, encoding="utf-8")
 
-        await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="inserted", insert_line=1)
-        )
+        await tool._arun(path=str(file_path), new_str="inserted", insert_line=1)
 
         # Check that history was saved
-        assert str(file_path) in tool.state.edit_history
-        history = tool.state.edit_history[str(file_path)]
+        assert str(file_path) in tool._edit_history
+        history = tool._edit_history[str(file_path)]
         assert len(history) == 1
         assert history[0] == original_content
 
@@ -294,9 +264,7 @@ class TestInsertSuccess:
         initial_timestamp = view_tracker.get_last_view_timestamp(str(file_path))
 
         # Perform insert
-        await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="new content", insert_line=2)
-        )
+        await tool._arun(path=str(file_path), new_str="new content", insert_line=2)
 
         # Check that timestamp was updated
         new_timestamp = view_tracker.get_last_view_timestamp(str(file_path))
@@ -311,8 +279,8 @@ class TestInsertSuccess:
         file_path = temp_dir / "no_tracker.txt"
         file_path.write_text("line1\nline2", encoding="utf-8")
 
-        result = await tool_no_view_tracker.run(
-            InsertLineArgs(path=str(file_path), new_str="INSERTED", insert_line=2)
+        result = await tool_no_view_tracker._arun(
+            path=str(file_path), new_str="INSERTED", insert_line=2
         )
 
         assert (
@@ -340,9 +308,7 @@ class TestLineOutOfBounds:
         file_path.write_text("", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=2)
-            )
+            await tool._arun(path=str(file_path), new_str="content", insert_line=1)
 
         assert exc_info.value.code == "LINE_OUT_OF_BOUNDS"
         assert "out of bounds" in str(exc_info.value)
@@ -358,9 +324,7 @@ class TestLineOutOfBounds:
         # Valid range is 1 to num_lines + 1 (1 to 3 for 2-line file)
         # So line 4 should fail
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=4)
-            )
+            await tool._arun(path=str(file_path), new_str="BOUNDARY", insert_line=4)
 
         assert exc_info.value.code == "LINE_OUT_OF_BOUNDS"
         assert "out of bounds" in str(exc_info.value)
@@ -375,9 +339,7 @@ class TestLineOutOfBounds:
         # Valid range is 1 to 4 for 3-line file
         # Line 5 should fail
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=5)
-            )
+            await tool._arun(path=str(file_path), new_str="content", insert_line=5)
 
         error_str = str(exc_info.value)
         # Check that the error message includes helpful guidance
@@ -394,9 +356,7 @@ class TestLineOutOfBounds:
         file_path.write_text("line1\nline2", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=5)
-            )
+            await tool._arun(path=str(file_path), new_str="content", insert_line=5)
 
         # Error should mention the number of lines in the file
         error_str = str(exc_info.value)
@@ -420,9 +380,7 @@ class TestFileNotFound:
         file_path = temp_dir / "nonexistent.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=1)
-            )
+            await tool._arun(path=str(file_path), new_str="new content", insert_line=1)
 
         assert exc_info.value.code == "FILE_NOT_FOUND"
         assert "not found" in str(exc_info.value)
@@ -434,9 +392,7 @@ class TestFileNotFound:
         file_path = temp_dir / "missing.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=1)
-            )
+            await tool._arun(path=str(file_path), new_str="new content", insert_line=1)
 
         error_str = str(exc_info.value).lower()
         # Check that suggestions include create
@@ -460,8 +416,8 @@ class TestPathResolution:
         file_path = temp_dir / "relative.txt"
         file_path.write_text("line1\nline2", encoding="utf-8")
 
-        result = await tool.run(
-            InsertLineArgs(path="relative.txt", new_str="INSERTED", insert_line=2)
+        result = await tool._arun(
+            path="relative.txt", new_str="INSERTED", insert_line=2
         )
 
         assert (
@@ -478,8 +434,8 @@ class TestPathResolution:
         file_path = temp_dir / "absolute.txt"
         file_path.write_text("line1\nline2", encoding="utf-8")
 
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="INSERTED", insert_line=2)
+        result = await tool._arun(
+            path=str(file_path), new_str="INSERTED", insert_line=2
         )
 
         assert (
@@ -508,8 +464,8 @@ class TestUTF8Encoding:
         original_content = "Hello, 世界! 🌍\nÑoño ©®™"
         file_path.write_text(original_content, encoding="utf-8")
 
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="ADDED TEXT", insert_line=2)
+        result = await tool._arun(
+            path=str(file_path), new_str="ADDED TEXT", insert_line=2
         )
 
         assert (
@@ -527,17 +483,17 @@ class TestUTF8Encoding:
 class TestToolConfiguration:
     """Tests for tool configuration."""
 
-    def test_tool_name_is_insert_line(self) -> None:
+    def test_tool_name_is_insert_line(self, tool: InsertLineTool) -> None:
         """Test tool has correct name."""
-        assert InsertLineTool.name == "insert_line"
+        assert tool.name == "insert_line"
 
-    def test_tool_has_description(self) -> None:
+    def test_tool_has_description(self, tool: InsertLineTool) -> None:
         """Test tool has description."""
-        assert len(InsertLineTool.description) > 0
+        assert len(tool.description) > 0
 
-    def test_tool_uses_insert_line_args_schema(self) -> None:
+    def test_tool_uses_insert_line_args_schema(self, tool: InsertLineTool) -> None:
         """Test tool uses InsertLineArgs as schema."""
-        assert InsertLineTool.args_schema == InsertLineArgs
+        assert tool.args_schema == InsertLineArgs
 
 
 # =============================================================================
@@ -557,9 +513,7 @@ class TestErrorMessages:
         # Test file not found
         file_path = temp_dir / "nonexistent.txt"
         try:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=1)
-            )
+            await tool._arun(path=str(file_path), new_str="new content", insert_line=1)
             raise AssertionError("Expected FileSystemError")
         except FileSystemError as e:
             assert len(e.suggestions) > 0
@@ -571,9 +525,7 @@ class TestErrorMessages:
         file_path = temp_dir / "notfound.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=1)
-            )
+            await tool._arun(path=str(file_path), new_str="new content", insert_line=1)
 
         error_msg = str(exc_info.value)
         # Should mention file not found and suggest create
@@ -588,9 +540,7 @@ class TestErrorMessages:
         file_path.write_text("line1\nline2", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                InsertLineArgs(path=str(file_path), new_str="content", insert_line=5)
-            )
+            await tool._arun(path=str(file_path), new_str="content", insert_line=5)
 
         error_msg = str(exc_info.value).lower()
         # Should mention bounds and suggest using read_file
@@ -615,15 +565,11 @@ class TestEditHistory:
         file_path.write_text("version 1", encoding="utf-8")
 
         # First insert
-        await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="inserted1", insert_line=2)
-        )
+        await tool._arun(path=str(file_path), new_str="inserted1", insert_line=2)
         # Second insert
-        await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="inserted2", insert_line=3)
-        )
+        await tool._arun(path=str(file_path), new_str="inserted2", insert_line=3)
 
-        history = tool.state.edit_history[str(file_path)]
+        history = tool._edit_history[str(file_path)]
         assert len(history) == 2
 
     async def test_pop_history_returns_previous_content(
@@ -634,18 +580,14 @@ class TestEditHistory:
         file_path.write_text("current content", encoding="utf-8")
 
         # Perform insert
-        await tool.run(
-            InsertLineArgs(
-                path=str(file_path), new_str="inserted content", insert_line=2
-            )
-        )
+        await tool._arun(path=str(file_path), new_str="inserted content", insert_line=2)
 
         # Pop history
         previous = tool._pop_history(str(file_path))
         assert previous == "current content"
 
         # History should be empty now
-        history = tool.state.edit_history[str(file_path)]
+        history = tool._edit_history[str(file_path)]
         assert len(history) == 0
 
     async def test_pop_history_returns_none_when_empty(
@@ -677,10 +619,8 @@ class TestEdgeCases:
         file_path.write_text("line1\nline2", encoding="utf-8")
 
         multiline_content = "new line A\nnew line B\nnew line C"
-        result = await tool.run(
-            InsertLineArgs(
-                path=str(file_path), new_str=multiline_content, insert_line=2
-            )
+        result = await tool._arun(
+            path=str(file_path), new_str=multiline_content, insert_line=2
         )
 
         assert (
@@ -697,17 +637,13 @@ class TestEdgeCases:
         file_path.write_text("only line", encoding="utf-8")
 
         # Insert at beginning
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="FIRST", insert_line=1)
-        )
+        result = await tool._arun(path=str(file_path), new_str="FIRST", insert_line=1)
         assert (
             "inserted successfully" in result.output or "inserted into" in result.output
         )
 
         # Insert at end (line 2)
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="LAST", insert_line=2)
-        )
+        result = await tool._arun(path=str(file_path), new_str="LAST", insert_line=2)
         assert (
             "inserted successfully" in result.output or "inserted into" in result.output
         )
@@ -720,9 +656,7 @@ class TestEdgeCases:
         file_path.write_text("line1\nline2\nline3", encoding="utf-8")
 
         # Insert at line 4 (num_lines + 1 = 3 + 1 = 4)
-        result = await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="AT END", insert_line=4)
-        )
+        result = await tool._arun(path=str(file_path), new_str="AT END", insert_line=4)
 
         assert (
             "inserted successfully" in result.output or "inserted into" in result.output
@@ -738,9 +672,7 @@ class TestEdgeCases:
         # Write with UTF-8 encoding
         file_path.write_text("café\nnaïve\nélève", encoding="utf-8")
 
-        await tool.run(
-            InsertLineArgs(path=str(file_path), new_str="TEST", insert_line=2)
-        )
+        await tool._arun(path=str(file_path), new_str="SOME TEXT", insert_line=10)
 
         # Read back and verify encoding is preserved
         content = file_path.read_text(encoding="utf-8")

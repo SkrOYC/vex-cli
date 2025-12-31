@@ -13,11 +13,17 @@ class TestVibeToolAdapter:
 
     def test_get_all_tools_returns_sequence(self, deepagents_config: VibeConfig):
         """Test get_all_tools returns a sequence of tools."""
+        from langchain_core.tools import BaseTool
+
         tools = VibeToolAdapter.get_all_tools(deepagents_config)
 
         assert hasattr(tools, "__iter__")  # It's iterable
         for tool in tools:
             assert isinstance(tool, BaseTool)
+            assert hasattr(tool, "name")
+            assert hasattr(tool, "description")
+            assert hasattr(tool, "args_schema")
+            assert hasattr(tool, "run") or hasattr(tool, "ainvoke")
 
     def test_get_all_tools_includes_bash(self, deepagents_config: VibeConfig):
         """Test get_all_tools includes the bash tool."""

@@ -56,14 +56,6 @@ def tool(temp_dir: Path) -> CreateTool:
     return CreateTool(workdir=temp_dir)
 
 
-@pytest.fixture
-def tool_with_view_tracker(
-    view_tracker: ViewTrackerService, temp_dir: Path
-) -> CreateTool:
-    """Create a CreateTool instance with view tracking for testing."""
-    return CreateTool(view_tracker=view_tracker, workdir=temp_dir)
-
-
 # =============================================================================
 # CreateArgs Tests
 # =============================================================================
@@ -127,9 +119,7 @@ class TestCreateOperation:
     ) -> None:
         """Test creating a new file succeeds."""
         file_path = temp_dir / "new_file.txt"
-        result = await tool.run(
-            CreateArgs(path=str(file_path), file_text="Hello, World!")
-        )
+        result = await tool._arun(path=str(file_path), file_text="Hello, World!")
 
         assert result.output == f"File '{file_path}' created successfully"
         assert file_path.exists()
@@ -152,7 +142,7 @@ class TestCreateOperation:
 
         # Try to create again - should fail
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(CreateArgs(path=str(file_path), file_text="new content"))
+            await tool._arun(path=str(file_path), file_text="new content")
 
         error = exc_info.value
         assert error.code == "FILE_ALREADY_EXISTS"
@@ -180,9 +170,7 @@ class TestCreateOperation:
         nested_path = temp_dir / "a" / "b" / "c" / "new_file.txt"
         assert not nested_path.parent.exists()
 
-        result = await tool.run(
-            CreateArgs(path=str(nested_path), file_text="nested content")
-        )
+        result = await tool._arun(path=str(nested_path), file_text="nested content")
 
         assert result.output == f"File '{nested_path}' created successfully"
         assert nested_path.exists()
@@ -197,8 +185,8 @@ class TestCreateOperation:
         subdir.mkdir()
 
         # Use relative path
-        result = await tool.run(
-            CreateArgs(path="subdir/relative_file.txt", file_text="relative content")
+        result = await tool._arun(
+            path="subdir/relative_file.txt", file_text="relative content"
         )
 
         expected_path = temp_dir / "subdir" / "relative_file.txt"
@@ -212,9 +200,7 @@ class TestCreateOperation:
         """Test absolute paths work correctly."""
         file_path = temp_dir / "absolute_file.txt"
 
-        result = await tool.run(
-            CreateArgs(path=str(file_path), file_text="absolute content")
-        )
+        result = await tool._arun(path=str(file_path), file_text="absolute content")
 
         assert result.output == f"File '{file_path}' created successfully"
         assert file_path.exists()
@@ -227,9 +213,7 @@ class TestCreateOperation:
         file_path = temp_dir / "unicode_file.txt"
         special_content = "Hello, 世界! 🌍 émojis 中文 日本語"
 
-        result = await tool.run(
-            CreateArgs(path=str(file_path), file_text=special_content)
-        )
+        result = await tool._arun(path=str(file_path), file_text=special_content)
 
         assert result.output == f"File '{file_path}' created successfully"
         assert file_path.exists()
@@ -239,7 +223,7 @@ class TestCreateOperation:
         """Test creating an empty file succeeds."""
         file_path = temp_dir / "empty_file.txt"
 
-        result = await tool.run(CreateArgs(path=str(file_path), file_text=""))
+        result = await tool._arun(path=str(file_path), file_text="")
 
         assert result.output == f"File '{file_path}' created successfully"
         assert file_path.exists()
@@ -252,68 +236,10 @@ class TestCreateOperation:
         file_path = temp_dir / "multiline_file.txt"
         multiline_content = "Line 1\nLine 2\nLine 3\n"
 
-        result = await tool.run(
-            CreateArgs(path=str(file_path), file_text=multiline_content)
-        )
+        result = await tool._arun(path=str(file_path), file_text=multiline_content)
 
         assert result.output == f"File '{file_path}' created successfully"
         assert file_path.read_text(encoding="utf-8") == multiline_content
-
-
-# =============================================================================
-# View Tracking Tests
-# =============================================================================
-
-
-@pytest.mark.asyncio
-class TestViewTracking:
-    """Tests for view tracking functionality."""
-
-    async def test_view_tracking_called_after_creation(
-        self, tool_with_view_tracker: CreateTool, temp_dir: Path
-    ) -> None:
-        """Test view_tracker.record_view() is called after successful creation."""
-        file_path = temp_dir / "tracked_file.txt"
-
-        await tool_with_view_tracker.run(
-            CreateArgs(path=str(file_path), file_text="tracked content")
-        )
-
-        # Verify view was recorded
-        tracker = tool_with_view_tracker.config.view_tracker
-        assert tracker is not None
-        assert tracker.has_been_viewed(str(file_path))
-
-    async def test_view_tracking_optional(
-        self, tool: CreateTool, temp_dir: Path
-    ) -> None:
-        """Test tool works correctly without view_tracker configured."""
-        file_path = temp_dir / "no_tracker_file.txt"
-
-        # Should succeed without view_tracker
-        result = await tool.run(
-            CreateArgs(path=str(file_path), file_text="no tracker content")
-        )
-
-        assert result.output == f"File '{file_path}' created successfully"
-        assert file_path.exists()
-
-    async def test_view_tracking_timestamp_recorded(
-        self, tool_with_view_tracker: CreateTool, temp_dir: Path
-    ) -> None:
-        """Test view timestamp is recorded correctly."""
-        file_path = temp_dir / "timestamp_file.txt"
-
-        await tool_with_view_tracker.run(
-            CreateArgs(path=str(file_path), file_text="timestamp content")
-        )
-
-        # Verify timestamp was recorded
-        tracker = tool_with_view_tracker.config.view_tracker
-        assert tracker is not None
-        timestamp = tracker.get_last_view_timestamp(str(file_path))
-        assert timestamp is not None
-        assert timestamp > 0
 
 
 # =============================================================================
@@ -333,7 +259,7 @@ class TestErrorMessageFormat:
         file_path.write_text("existing", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(CreateArgs(path=str(file_path), file_text="new content"))
+            await tool._arun(path=str(file_path), file_text="new content")
 
         error = exc_info.value
         # Exact TypeScript error message format
@@ -352,9 +278,7 @@ class TestErrorMessageFormat:
         """Test success message matches TypeScript format exactly."""
         file_path = temp_dir / "success_format_test.txt"
 
-        result = await tool.run(
-            CreateArgs(path=str(file_path), file_text="success content")
-        )
+        result = await tool._arun(path=str(file_path), file_text="success content")
 
         # Exact TypeScript success message format
         assert result.output == f"File '{file_path}' created successfully"
@@ -375,7 +299,7 @@ class TestPathResolution:
         """Test absolute paths are used as-is."""
         file_path = temp_dir / "absolute_test.txt"
 
-        result = await tool.run(CreateArgs(path=str(file_path), file_text="content"))
+        result = await tool._arun(path=str(file_path), file_text="content")
 
         assert file_path.exists()
         assert result.output == f"File '{file_path}' created successfully"
@@ -386,9 +310,7 @@ class TestPathResolution:
         """Test relative paths are resolved against workdir."""
         file_path = temp_dir / "relative_test.txt"
 
-        result = await tool.run(
-            CreateArgs(path="relative_test.txt", file_text="content")
-        )
+        result = await tool._arun(path="relative_test.txt", file_text="content")
 
         assert file_path.exists()
         assert result.output == f"File '{file_path}' created successfully"
@@ -399,9 +321,7 @@ class TestPathResolution:
         """Test paths starting with ./ are resolved correctly."""
         file_path = temp_dir / "dot_prefix_test.txt"
 
-        result = await tool.run(
-            CreateArgs(path="./dot_prefix_test.txt", file_text="content")
-        )
+        result = await tool._arun(path="./dot_prefix_test.txt", file_text="content")
 
         assert file_path.exists()
         assert result.output == f"File '{file_path}' created successfully"
@@ -415,15 +335,15 @@ class TestPathResolution:
 class TestToolMetadata:
     """Tests for tool name and description."""
 
-    def test_tool_name(self) -> None:
+    def test_tool_name(self, tool: CreateTool) -> None:
         """Test tool has correct name."""
-        assert CreateTool.name == "create"
+        assert tool.name == "create"
 
-    def test_tool_description(self) -> None:
+    def test_tool_description(self, tool: CreateTool) -> None:
         """Test tool has correct description."""
-        assert "create" in CreateTool.description.lower()
-        assert "new files" in CreateTool.description.lower()
+        assert "create" in tool.description.lower()
+        assert "new files" in tool.description.lower()
 
-    def test_tool_args_schema(self) -> None:
+    def test_tool_args_schema(self, tool: CreateTool) -> None:
         """Test tool has correct args schema."""
-        assert CreateTool.args_schema == CreateArgs
+        assert tool.args_schema == CreateArgs

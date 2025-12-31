@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 import pytest
 
-from vibe.core.tools.base import BaseTool
 from vibe.core.tools.ui import ToolCallDisplay, ToolResultDisplay, ToolUIDataAdapter
 from vibe.core.types import ToolCallEvent, ToolResultEvent
 
@@ -35,7 +35,8 @@ class MockToolResult(BaseModel):
 class NonUIDataTool(BaseTool):
     """Mock tool class that doesn't implement ToolUIData protocol."""
 
-    pass
+    name: str = "mock_tool"
+    description: str = "Mock tool for testing"
 
 
 def test_tool_ui_adapter_with_none_tool_class(none_tool_adapter):
@@ -98,6 +99,17 @@ def test_get_result_display_with_none_tool_class_skipped(none_tool_adapter):
     assert isinstance(display, ToolResultDisplay)
     assert display.success is False
     assert display.message == "Test skip reason"
+
+
+class TestLangChainCompatibility:
+    """Test that mock tools are LangChain BaseTool compatible."""
+
+    def test_mock_tool_has_langchain_attributes(self):
+        """Test mock tool has required LangChain attributes."""
+        # Check class-level attributes for LangChain BaseTool compatibility
+        assert "name" in NonUIDataTool.model_fields
+        assert "description" in NonUIDataTool.model_fields
+        assert hasattr(NonUIDataTool, "_run")
 
 
 def test_get_result_display_with_none_tool_class_success(none_tool_adapter):

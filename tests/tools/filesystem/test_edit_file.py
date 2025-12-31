@@ -128,9 +128,7 @@ class TestStrReplaceSuccess:
         file_path = temp_dir / "test.txt"
         file_path.write_text("hello world", encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(path=str(file_path), old_str="world", new_str="bun")
-        )
+        result = await tool._arun(path=str(file_path), old_str="world", new_str="bun")
 
         assert "modified successfully" in result.output
         assert file_path.read_text(encoding="utf-8") == "hello bun"
@@ -143,10 +141,8 @@ class TestStrReplaceSuccess:
         content = "line1\nline2\nline3"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(
-                path=str(file_path), old_str="line1\nline2", new_str="replaced"
-            )
+        result = await tool._arun(
+            path=str(file_path), old_str="line1\nline2", new_str="replaced"
         )
 
         assert "modified successfully" in result.output
@@ -159,9 +155,7 @@ class TestStrReplaceSuccess:
         file_path = temp_dir / "remove.txt"
         file_path.write_text("hello world", encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(path=str(file_path), old_str=" world", new_str="")
-        )
+        result = await tool._arun(path=str(file_path), old_str=" world", new_str="")
 
         assert "modified successfully" in result.output
         assert file_path.read_text(encoding="utf-8") == "hello"
@@ -174,13 +168,11 @@ class TestStrReplaceSuccess:
         original_content = "original content"
         file_path.write_text(original_content, encoding="utf-8")
 
-        await tool.run(
-            EditFileArgs(path=str(file_path), old_str="original", new_str="modified")
-        )
+        await tool._arun(path=str(file_path), old_str="original", new_str="modified")
 
         # Check that history was saved
-        assert str(file_path) in tool.state.edit_history
-        history = tool.state.edit_history[str(file_path)]
+        assert str(file_path) in tool._edit_history
+        history = tool._edit_history[str(file_path)]
         assert len(history) == 1
         assert history[0] == original_content
 
@@ -196,9 +188,7 @@ class TestStrReplaceSuccess:
         initial_timestamp = view_tracker.get_last_view_timestamp(str(file_path))
 
         # Perform edit
-        await tool.run(
-            EditFileArgs(path=str(file_path), old_str="content", new_str="new content")
-        )
+        await tool._arun(path=str(file_path), old_str="content", new_str="new content")
 
         # Check that timestamp was updated
         new_timestamp = view_tracker.get_last_view_timestamp(str(file_path))
@@ -213,8 +203,8 @@ class TestStrReplaceSuccess:
         file_path = temp_dir / "no_tracker.txt"
         file_path.write_text("hello", encoding="utf-8")
 
-        result = await tool_no_view_tracker.run(
-            EditFileArgs(path=str(file_path), old_str="hello", new_str="world")
+        result = await tool_no_view_tracker._arun(
+            path=str(file_path), old_str="hello", new_str="world"
         )
 
         assert "modified successfully" in result.output
@@ -239,9 +229,7 @@ class TestStrReplaceTextNotFound:
         file_path.write_text("hello world", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="nonexistent", new_str="text")
-            )
+            await tool._arun(path=str(file_path), old_str="nonexistent", new_str="text")
 
         assert exc_info.value.code == "TEXT_NOT_FOUND"
         assert "was not found" in str(exc_info.value)
@@ -254,9 +242,7 @@ class TestStrReplaceTextNotFound:
         file_path.write_text("hello world", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="goodbye", new_str="hello")
-            )
+            await tool._arun(path=str(file_path), old_str="goodbye", new_str="hello")
 
         assert exc_info.value.code == "TEXT_NOT_FOUND"
         assert len(exc_info.value.suggestions) > 0
@@ -275,9 +261,7 @@ class TestStrReplaceTextNotFound:
         file_path.write_text("", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="anything", new_str="text")
-            )
+            await tool._arun(path=str(file_path), old_str="anything", new_str="text")
 
         assert exc_info.value.code == "TEXT_NOT_FOUND"
 
@@ -289,9 +273,7 @@ class TestStrReplaceTextNotFound:
         file_path.write_text("content", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="", new_str="replacement")
-            )
+            await tool._arun(path=str(file_path), old_str="", new_str="replacement")
 
         assert exc_info.value.code == "INVALID_ARGUMENT"
         assert "cannot be an empty string" in str(exc_info.value)
@@ -315,9 +297,7 @@ class TestStrReplaceMultipleMatches:
         file_path.write_text("repeat repeat", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="repeat", new_str="once")
-            )
+            await tool._arun(path=str(file_path), old_str="repeat", new_str="once")
 
         assert exc_info.value.code == "MULTIPLE_MATCHES"
         assert "appears 2 times" in str(exc_info.value)
@@ -330,9 +310,7 @@ class TestStrReplaceMultipleMatches:
         file_path.write_text("foo foo foo foo", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="foo", new_str="bar")
-            )
+            await tool._arun(path=str(file_path), old_str="foo", new_str="bar")
 
         assert exc_info.value.code == "MULTIPLE_MATCHES"
         # Check that count is mentioned
@@ -363,9 +341,7 @@ class TestFileNotFound:
         file_path = temp_dir / "nonexistent.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="old", new_str="new")
-            )
+            await tool._arun(path=str(file_path), old_str="old", new_str="new")
 
         assert exc_info.value.code == "FILE_NOT_FOUND"
         assert "not found" in str(exc_info.value)
@@ -377,9 +353,7 @@ class TestFileNotFound:
         file_path = temp_dir / "missing.txt"
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                EditFileArgs(path=str(file_path), old_str="old", new_str="new")
-            )
+            await tool._arun(path=str(file_path), old_str="old", new_str="new")
 
         assert exc_info.value.code == "FILE_NOT_FOUND"
         assert len(exc_info.value.suggestions) > 0
@@ -406,8 +380,8 @@ class TestPathResolution:
         file_path = temp_dir / "relative.txt"
         file_path.write_text("original", encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(path="relative.txt", old_str="original", new_str="modified")
+        result = await tool._arun(
+            path="relative.txt", old_str="original", new_str="modified"
         )
 
         assert "modified successfully" in result.output
@@ -421,8 +395,8 @@ class TestPathResolution:
         file_path = temp_dir / "absolute.txt"
         file_path.write_text("original", encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(path=str(file_path), old_str="original", new_str="modified")
+        result = await tool._arun(
+            path=str(file_path), old_str="original", new_str="modified"
         )
 
         assert "modified successfully" in result.output
@@ -447,9 +421,7 @@ class TestUTF8Encoding:
         content = "Hello, 世界! 🌍 Ñoño ©®™"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(path=str(file_path), old_str="世界", new_str="宇宙")
-        )
+        result = await tool._arun(path=str(file_path), old_str="世界", new_str="宇宙")
 
         assert "modified successfully" in result.output
         expected = "Hello, 宇宙! 🌍 Ñoño ©®™"
@@ -464,17 +436,17 @@ class TestUTF8Encoding:
 class TestToolConfiguration:
     """Tests for tool configuration."""
 
-    def test_tool_name_is_edit_file(self) -> None:
+    def test_tool_name_is_edit_file(self, tool: EditFileTool) -> None:
         """Test tool has correct name."""
-        assert EditFileTool.name == "edit_file"
+        assert tool.name == "edit_file"
 
-    def test_tool_has_description(self) -> None:
+    def test_tool_has_description(self, tool: EditFileTool) -> None:
         """Test tool has description."""
-        assert len(EditFileTool.description) > 0
+        assert len(tool.description) > 0
 
-    def test_tool_uses_edit_file_args_schema(self) -> None:
+    def test_tool_uses_edit_file_args_schema(self, tool: EditFileTool) -> None:
         """Test tool uses EditFileArgs as schema."""
-        assert EditFileTool.args_schema == EditFileArgs
+        assert tool.args_schema == EditFileArgs
 
 
 # =============================================================================
@@ -495,15 +467,11 @@ class TestEditHistory:
         file_path.write_text("version 1", encoding="utf-8")
 
         # First edit
-        await tool.run(
-            EditFileArgs(path=str(file_path), old_str="version 1", new_str="version 2")
-        )
+        await tool._arun(path=str(file_path), old_str="version 1", new_str="version 2")
         # Second edit
-        await tool.run(
-            EditFileArgs(path=str(file_path), old_str="version 2", new_str="version 3")
-        )
+        await tool._arun(path=str(file_path), old_str="version 2", new_str="version 3")
 
-        history = tool.state.edit_history[str(file_path)]
+        history = tool._edit_history[str(file_path)]
         assert len(history) == 2
         assert history[0] == "version 1"
         assert history[1] == "version 2"
@@ -516,10 +484,8 @@ class TestEditHistory:
         file_path.write_text("current content", encoding="utf-8")
 
         # Perform edit
-        await tool.run(
-            EditFileArgs(
-                path=str(file_path), old_str="current", new_str="modified content"
-            )
+        await tool._arun(
+            path=str(file_path), old_str="current", new_str="modified content"
         )
 
         # Pop history
@@ -527,7 +493,7 @@ class TestEditHistory:
         assert previous == "current content"
 
         # History should be empty now
-        history = tool.state.edit_history[str(file_path)]
+        history = tool._edit_history[str(file_path)]
         assert len(history) == 0
 
     async def test_pop_history_returns_none_when_empty(
@@ -559,8 +525,8 @@ class TestEdgeCases:
         content = "line1\nline2\nline3"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(path=str(file_path), old_str=content, new_str="new content")
+        result = await tool._arun(
+            path=str(file_path), old_str=content, new_str="new content"
         )
 
         assert "modified successfully" in result.output
@@ -574,10 +540,8 @@ class TestEdgeCases:
         content = "line1\nline2\nline3\nline4"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(
-                path=str(file_path), old_str="line1\nline2\nline3", new_str="replaced"
-            )
+        result = await tool._arun(
+            path=str(file_path), old_str="line1\nline2\nline3", new_str="replaced"
         )
 
         assert "modified successfully" in result.output
@@ -591,9 +555,7 @@ class TestEdgeCases:
         content = "file (1).txt"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            EditFileArgs(path=str(file_path), old_str="(1)", new_str="[2]")
-        )
+        result = await tool._arun(path=str(file_path), old_str="(1)", new_str="[2]")
 
         assert "modified successfully" in result.output
         assert file_path.read_text(encoding="utf-8") == "file [2].txt"

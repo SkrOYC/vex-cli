@@ -204,7 +204,7 @@ class TestContentViewMode:
         content = "line1\nline2\nline3"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         assert result.content.line_count == 3
@@ -220,8 +220,8 @@ class TestContentViewMode:
         content = "line1\nline2\nline3\nline4\nline5"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            ReadFileArgs(path=str(file_path), view_type="content", view_range=(2, 4))
+        result = await tool._arun(
+            path=str(file_path), view_type="content", view_range=(2, 4)
         )
 
         assert result.content is not None
@@ -242,8 +242,8 @@ class TestContentViewMode:
         content = "line1\nline2\nline3\nline4\nline5"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            ReadFileArgs(path=str(file_path), view_type="content", view_range=(3, -1))
+        result = await tool._arun(
+            path=str(file_path), view_type="content", view_range=(3, -1)
         )
 
         assert result.content is not None
@@ -261,10 +261,8 @@ class TestContentViewMode:
         file_path.write_text(content, encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                ReadFileArgs(
-                    path=str(file_path), view_type="content", view_range=(1, 100)
-                )
+            await tool._arun(
+                path=str(file_path), view_type="content", view_range=(1, 100)
             )
 
         assert exc_info.value.code == "VIEW_RANGE_OUT_OF_BOUNDS"
@@ -279,7 +277,7 @@ class TestContentViewMode:
         content = "Hello, 世界! 🌍 Ñoño ©®™"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         assert "世界" in result.content.output
@@ -292,7 +290,7 @@ class TestContentViewMode:
         file_path = temp_dir / "relative.txt"
         file_path.write_text("relative content", encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path="relative.txt", view_type="content"))
+        result = await tool._arun(path="relative.txt", view_type="content")
 
         assert result.content is not None
         assert "relative content" in result.content.output
@@ -304,7 +302,7 @@ class TestContentViewMode:
         file_path = temp_dir / "absolute.txt"
         file_path.write_text("absolute content", encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         assert "absolute content" in result.content.output
@@ -336,7 +334,7 @@ def function2():
 """
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="outline"))
+        result = await tool._arun(path=str(file_path), view_type="outline")
 
         assert result.content is not None
         assert "FILE:" in result.content.output
@@ -350,7 +348,7 @@ def function2():
         content = "line1\nline2\nline3\n" * 50  # More than 100 lines
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="outline"))
+        result = await tool._arun(path=str(file_path), view_type="outline")
 
         assert result.content is not None
         # Should show first 100 lines
@@ -369,7 +367,7 @@ def function2():
         content = "print('hello')\n" * 100  # Small file
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="auto"))
+        result = await tool._arun(path=str(file_path), view_type="auto")
 
         assert result.content is not None
         # Should show content with line numbers
@@ -383,7 +381,7 @@ def function2():
         content = "def func():\n    pass\n" * 1000  # Large file
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="auto"))
+        result = await tool._arun(path=str(file_path), view_type="auto")
 
         assert result.content is not None
         # Should show outline, not full content
@@ -398,8 +396,8 @@ def function2():
         content = "line1\nline2\nline3\nline4\nline5"
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(
-            ReadFileArgs(path=str(file_path), view_type="auto", view_range=(2, 3))
+        result = await tool._arun(
+            path=str(file_path), view_type="auto", view_range=(2, 3)
         )
 
         assert result.content is not None
@@ -427,7 +425,7 @@ class TestMediaFileView:
         )
         file_path.write_bytes(png_bytes)
 
-        result = await tool.run(ReadFileArgs(path=str(file_path)))
+        result = await tool._arun(path=str(file_path))
 
         assert result.media is not None
         assert result.media.type == "image"
@@ -444,7 +442,7 @@ class TestMediaFileView:
         mp3_content = b"ID3" + b"\x04\x00\x00\x00\x00\x00\x00" + b"\x00" * 100
         file_path.write_bytes(mp3_content)
 
-        result = await tool.run(ReadFileArgs(path=str(file_path)))
+        result = await tool._arun(path=str(file_path))
 
         assert result.media is not None
         assert result.media.type == "audio"
@@ -460,7 +458,7 @@ class TestMediaFileView:
         file_path.write_bytes(large_content)
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(ReadFileArgs(path=str(file_path)))
+            await tool._arun(path=str(file_path))
 
         assert exc_info.value.code == "MEDIA_TOO_LARGE"
         assert "exceeding" in str(exc_info.value)
@@ -476,7 +474,7 @@ class TestMediaFileView:
         )
         file_path.write_bytes(png_bytes)
 
-        await tool.run(ReadFileArgs(path=str(file_path)))
+        await tool._arun(path=str(file_path))
 
         assert view_tracker.has_been_viewed(str(file_path))
 
@@ -499,7 +497,7 @@ class TestDirectoryView:
         (subdir / "file1.txt").write_text("content1")
         (temp_dir / "file2.txt").write_text("content2")
 
-        result = await tool.run(ReadFileArgs(path=str(temp_dir), view_type="content"))
+        result = await tool._arun(path=str(temp_dir), view_type="content")
 
         assert result.content is not None
         assert "DIRECTORY:" in result.content.output
@@ -516,7 +514,7 @@ class TestDirectoryView:
         (temp_dir / "module2.py").write_text("class MyClass:\n    pass\n")
         (temp_dir / "readme.txt").write_text("This is a readme")
 
-        result = await tool.run(ReadFileArgs(path=str(temp_dir), view_type="outline"))
+        result = await tool._arun(path=str(temp_dir), view_type="outline")
 
         assert result.content is not None
         assert "DIRECTORY OUTLINE:" in result.content.output
@@ -533,10 +531,8 @@ class TestDirectoryView:
         (temp_dir / "file.txt").write_text("content")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                ReadFileArgs(
-                    path=str(temp_dir), view_type="content", view_range=(1, 10)
-                )
+            await tool._arun(
+                path=str(temp_dir), view_type="content", view_range=(1, 10)
             )
 
         assert exc_info.value.code == "INVALID_ARGUMENT"
@@ -551,7 +547,7 @@ class TestDirectoryView:
         (temp_dir / "readme.txt").write_text("Readme")
         (temp_dir / "data.json").write_text('{"key": "value"}')
 
-        result = await tool.run(ReadFileArgs(path=str(temp_dir), view_type="outline"))
+        result = await tool._arun(path=str(temp_dir), view_type="outline")
 
         assert result.content is not None
         assert "No Python files found" in result.content.output
@@ -570,7 +566,7 @@ class TestErrorMessages:
     ) -> None:
         """Test file not found error includes helpful suggestions."""
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(ReadFileArgs(path=str(temp_dir / "nonexistent.txt")))
+            await tool._arun(path=str(temp_dir / "nonexistent.txt"))
 
         assert exc_info.value.code == "FILE_NOT_FOUND"
         assert "not found" in str(exc_info.value)
@@ -587,7 +583,7 @@ class TestErrorMessages:
 
         try:
             with pytest.raises(FileSystemError) as exc_info:
-                await tool.run(ReadFileArgs(path=str(file_path)))
+                await tool._arun(path=str(file_path))
 
             assert exc_info.value.code == "PERMISSION_DENIED"
             assert "Permission denied" in str(exc_info.value)
@@ -612,7 +608,7 @@ class TestOutputTruncation:
         content = "line\n" * 50_000  # ~300KB
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         # Output should be truncated
@@ -627,7 +623,7 @@ class TestOutputTruncation:
         for i in range(5000):
             (temp_dir / f"file_{i}.txt").write_text(f"content {i}")
 
-        result = await tool.run(ReadFileArgs(path=str(temp_dir), view_type="content"))
+        result = await tool._arun(path=str(temp_dir), view_type="content")
 
         assert result.content is not None
         # Output should be truncated
@@ -671,7 +667,7 @@ class TestLineNumberFormatting:
         file_path = temp_dir / "single.txt"
         file_path.write_text("a\nb\nc", encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         assert "1| a" in result.content.output
@@ -687,7 +683,7 @@ class TestLineNumberFormatting:
         content = "\n".join(f"line {i}" for i in range(100))
         file_path.write_text(content, encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         # Line 1 should have padding to match line 100
@@ -710,7 +706,7 @@ class TestViewTracking:
         file_path = temp_dir / "track_content.txt"
         file_path.write_text("content", encoding="utf-8")
 
-        await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        await tool._arun(path=str(file_path), view_type="content")
 
         assert view_tracker.has_been_viewed(str(file_path))
 
@@ -721,7 +717,7 @@ class TestViewTracking:
         file_path = temp_dir / "track_outline.py"
         file_path.write_text("def func():\n    pass\n", encoding="utf-8")
 
-        await tool.run(ReadFileArgs(path=str(file_path), view_type="outline"))
+        await tool._arun(path=str(file_path), view_type="outline")
 
         assert view_tracker.has_been_viewed(str(file_path))
 
@@ -731,7 +727,7 @@ class TestViewTracking:
         """Test directory view records view in tracker."""
         (temp_dir / "file.txt").write_text("content")
 
-        await tool.run(ReadFileArgs(path=str(temp_dir), view_type="content"))
+        await tool._arun(path=str(temp_dir), view_type="content")
 
         assert view_tracker.has_been_viewed(str(temp_dir))
 
@@ -742,8 +738,8 @@ class TestViewTracking:
         file_path = temp_dir / "no_tracker.txt"
         file_path.write_text("content", encoding="utf-8")
 
-        result = await tool_no_view_tracker.run(
-            ReadFileArgs(path=str(file_path), view_type="content")
+        result = await tool_no_view_tracker._arun(
+            path=str(file_path), view_type="content"
         )
 
         assert result.content is not None
@@ -763,7 +759,7 @@ class TestEdgeCases:
         file_path = temp_dir / "empty.txt"
         file_path.write_text("", encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         assert result.content.line_count == 0
@@ -777,7 +773,7 @@ class TestEdgeCases:
         file_path = temp_dir / "newlines.txt"
         file_path.write_text("\n\n\n", encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         assert result.content.line_count == 3
@@ -790,17 +786,15 @@ class TestEdgeCases:
         file_path.write_text("line1\nline2\nline3", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(
-                ReadFileArgs(
-                    path=str(file_path), view_type="content", view_range=(5, 2)
-                )
+            await tool._arun(
+                path=str(file_path), view_type="content", view_range=(5, 2)
             )
 
         assert exc_info.value.code == "INVALID_VIEW_RANGE"
 
     async def test_empty_directory(self, tool: ReadFileTool, temp_dir: Path) -> None:
         """Test viewing an empty directory."""
-        result = await tool.run(ReadFileArgs(path=str(temp_dir), view_type="content"))
+        result = await tool._arun(path=str(temp_dir), view_type="content")
 
         assert result.content is not None
         assert "DIRECTORY:" in result.content.output
@@ -812,7 +806,7 @@ class TestEdgeCases:
         file_path = temp_dir / "file-with-dashes_and_underscores.txt"
         file_path.write_text("content", encoding="utf-8")
 
-        result = await tool.run(ReadFileArgs(path=str(file_path), view_type="content"))
+        result = await tool._arun(path=str(file_path), view_type="content")
 
         assert result.content is not None
         assert "content" in result.content.output
