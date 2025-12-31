@@ -154,7 +154,7 @@ class VibeAcpAgent(AcpAgent):
             }) from e
 
         # Create VibeEngine instance with the config
-        agent = VibeEngine(config=config, approval_callback=None)
+        agent = VibeEngine(config=config)
         session = AcpSession(id=agent.session_id, agent=agent)
         self.sessions[session.id] = session
 
@@ -223,7 +223,7 @@ class VibeAcpAgent(AcpAgent):
         # Extract current conversation history before recreating the engine
         current_messages = session.agent.get_current_messages()
 
-        new_agent = VibeEngine(config=new_config, approval_callback=None)
+        new_agent = VibeEngine(config=new_config)
 
         # Initialize the new agent
         new_agent.initialize()

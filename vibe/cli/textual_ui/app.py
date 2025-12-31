@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
 from enum import StrEnum, auto
 import subprocess
 from typing import Any, ClassVar, assert_never
@@ -51,11 +50,8 @@ from vibe.core.engine import VibeEngine
 from vibe.core.engine.langchain_engine import VibeLangChainEngine
 from vibe.core.tools.base import BaseToolConfig, ToolPermission
 from vibe.core.types import (
-    ApprovalResponse,
-    BaseEvent,
     LLMMessage,
     ResumeSessionInfo,
-    Role,
 )
 from vibe.core.utils import (
     CancellationReason,
@@ -427,12 +423,8 @@ class VibeApp(App):
         self._agent_initializing = True
         try:
             # Instantiate VibeLangChainEngine directly
-            # For TUI mode, we use the HumanInTheLoopMiddleware for approvals,
-            # so we don't need to provide an approval_callback here
-            engine = VibeLangChainEngine(
-                config=self.config,
-                approval_callback=None,  # HITL middleware handles approvals
-            )
+            # HITL middleware handles approvals
+            engine = VibeLangChainEngine(config=self.config)
 
             # Initialize the engine
             engine.initialize()

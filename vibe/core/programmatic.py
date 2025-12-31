@@ -5,7 +5,7 @@ import asyncio
 from vibe.core.config import VibeConfig
 from vibe.core.engine.langchain_engine import VibeLangChainEngine
 from vibe.core.output_formatters import create_formatter
-from vibe.core.types import AssistantEvent, LLMMessage, OutputFormat, Role
+from vibe.core.types import AssistantEvent, LLMMessage, OutputFormat
 from vibe.core.utils import ConversationLimitException, logger
 
 
@@ -35,10 +35,7 @@ def run_programmatic(
     formatter = create_formatter(output_format)
 
     # Use VibeLangChainEngine directly
-    engine = VibeLangChainEngine(
-        config=config,
-        approval_callback=None,  # Programmatic mode auto-approves all tools
-    )
+    engine = VibeLangChainEngine(config=config)
     logger.info("USER: %s", prompt)
 
     async def _async_run() -> str | None:
