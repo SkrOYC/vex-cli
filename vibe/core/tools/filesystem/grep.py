@@ -26,11 +26,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import ClassVar, TypedDict
+from typing import Any, ClassVar, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.base import BaseTool
+from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import (
     DEFAULT_CONTEXT_AFTER,
     DEFAULT_CONTEXT_BEFORE,
@@ -89,34 +90,6 @@ class GrepResult(BaseModel):
 
 
 # =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class GrepToolConfig(BaseToolConfig):
-    """Configuration for GrepTool.
-
-    Extends BaseToolConfig without additional fields.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-
-class GrepToolState(BaseToolState):
-    """State for GrepTool.
-
-    Currently empty - grep is a read-only search tool with no persistent state.
-
-    Attributes:
-        (none currently - read-only tool)
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    pass
-
-
-# =============================================================================
 # TypedDicts for type-safe search results
 # =============================================================================
 
@@ -149,7 +122,7 @@ class SearchResult(TypedDict):
 # =============================================================================
 
 
-class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
+class GrepTool(BaseTool):
     """Tool for searching file content with regex support and context lines.
 
     This tool provides comprehensive search capabilities:
@@ -159,18 +132,11 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
     - Recursive and non-recursive directory search
     - Context lines before and after matches (5 before, 3 after by default)
     - Output formatting matching TypeScript FileExplorer behavior
-
-    Attributes:
-        name: Tool name identifier ("grep").
-        description: Description of tool functionality.
-        args_schema: Pydantic model for input validation.
-        config: Tool configuration.
-        state: Tool state for tracking operations.
     """
 
-    name = "grep"
-    description = "Search files with regex support and context lines. Use regex=true for regex patterns, or literal search by default."
-    args_schema: type[GrepArgs] = GrepArgs
+    # Class attributes for compatibility (set via __init__ but accessible as class attrs)
+    name: str = "grep"
+    description: str = "Search files with regex support and context lines. Use regex=true for regex patterns, or literal search by default."
 
     # Text file extensions for filtering
     _TEXT_EXTENSIONS: ClassVar[frozenset[str]] = frozenset({
@@ -227,11 +193,51 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         ".nb",
     })
 
-    async def run(self, args: GrepArgs) -> GrepResult:
+    def __init__(
+        self,
+        view_tracker: "ViewTrackerService | None" = None,
+        workdir: Path | None = None,
+    ) -> None:
+        """Initialize GrepTool.
+
+        Args:
+            view_tracker: Optional service for tracking file views.
+            workdir: Working directory for path resolution. Defaults to cwd if None.
+        """
+        super().__init__(
+            name="grep",
+            description="Search files with regex support and context lines. Use regex=true for regex patterns, or literal search by default.",
+            args_schema=GrepArgs,
+        )
+        self._view_tracker = view_tracker
+        self._workdir = workdir or Path.cwd()
+
+    def _run(self, **kwargs: Any) -> str:
+        """Synchronous execution not supported."""
+        raise NotImplementedError("GrepTool only supports async execution")
+
+    async def _arun(
+        self,
+        path: str = ".",
+        query: str = "",
+        patterns: list[str] = [],
+        case_sensitive: bool = False,
+        regex: bool = False,
+        recursive: bool = True,
+        max_results: int = 1000,
+        include_hidden: bool = False,
+    ) -> GrepResult:
         """Execute the grep tool operation.
 
         Args:
-            args: GrepArgs containing search path, query, and options.
+            path: Directory path to search (absolute or relative to working directory).
+            query: Search query or regex pattern to search for.
+            patterns: List of file patterns to limit search (e.g., ['*.py', '*.ts']).
+            case_sensitive: Whether to perform case-sensitive search (default: False).
+            regex: Whether to interpret query as regex pattern (default: False).
+            recursive: Whether to search subdirectories (default: True).
+            max_results: Maximum number of matches to return (default: 1000, range: 1-10000).
+            include_hidden: Whether to include hidden files and directories (default: False).
 
         Returns:
             GrepResult with formatted search output.
@@ -241,31 +247,33 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
             ValueError: If regex pattern is invalid.
         """
         # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        resolved_path = self._resolve_path(path)
 
         # Validate path exists
         if not resolved_path.exists():
             raise ValueError(
-                f"Directory not found: '{args.path}'\n\n"
-                f"The specified directory doesn't exist in current working directory: {self.config.effective_workdir}\n"
+                f"Directory not found: '{path}'\n\n"
+                f"The specified directory doesn't exist in current working directory: {self._workdir}\n"
                 "Try using 'list' command to explore available directories."
             )
 
         # Check if path is a directory
         if not resolved_path.is_dir():
             raise ValueError(
-                f"Path is not a directory: '{args.path}'\n\n"
+                f"Path is not a directory: '{path}'\n\n"
                 "Use 'view' command to examine file contents.\n"
                 "Specify a directory path to search."
             )
 
         try:
             # Get text files to search
-            text_files = await self._get_text_files_for_search(resolved_path, args)
+            text_files = await self._get_text_files_for_search(
+                resolved_path, path, patterns, recursive, include_hidden
+            )
 
             if not text_files:
                 raise ValueError(
-                    f"No text files found in: '{args.path}'\n\n"
+                    f"No text files found in: '{path}'\n\n"
                     "The search only works on text files. Try:\n"
                     "• Use 'list' command to see what files are in directory\n"
                     "• Specify a directory with known text files\n"
@@ -273,11 +281,13 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
                 )
 
             # Execute search
-            results = await self._execute_search(text_files, args)
+            results = await self._execute_search(
+                text_files, query, case_sensitive, regex, max_results
+            )
 
             if not results:
                 return GrepResult(
-                    output=f'No matches found for "{args.query}" in {len(text_files)} files\n\n'
+                    output=f'No matches found for "{query}" in {len(text_files)} files\n\n'
                     f"Try adjusting your search pattern or check the file paths."
                 )
 
@@ -286,8 +296,8 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
 
             # Add truncation footer if needed
             total_matches = sum(len(r["matches"]) for r in results)
-            if total_matches >= args.max_results:
-                output += f"\n\nFound {total_matches} matches across files (showing first {args.max_results} matches). Consider using more specific search patterns or file filters to narrow results."
+            if total_matches >= max_results:
+                output += f"\n\nFound {total_matches} matches across files (showing first {max_results} matches). Consider using more specific search patterns or file filters to narrow results."
 
             # Apply output truncation
             output = self._truncate_output(output)
@@ -326,7 +336,7 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
+            return (self._workdir / path).resolve()
 
     # =============================================================================
     # Text File Detection
@@ -424,31 +434,39 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         return filtered_files
 
     async def _get_text_files_for_search(
-        self, search_path: Path, args: GrepArgs
+        self,
+        search_path: Path,
+        path: str,
+        patterns: list[str],
+        recursive: bool,
+        include_hidden: bool,
     ) -> list[Path]:
         """Get text files to search, filtered by patterns.
 
         Args:
             search_path: Directory to search in.
-            args: GrepArgs with search options.
+            path: Search path for error messages.
+            patterns: List of file patterns to limit search.
+            recursive: Whether to search recursively.
+            include_hidden: Whether to include hidden files.
 
         Returns:
             List of text file paths to search.
         """
         # Discover files by pattern
-        if args.patterns:
+        if patterns:
             candidate_files = self._discover_files_by_pattern(
-                search_path, args.patterns, args.recursive
+                search_path, patterns, recursive
             )
         else:
             # No patterns - search all files
             candidate_files = self._discover_files_by_pattern(
-                search_path, ["*"], args.recursive
+                search_path, ["*"], recursive
             )
 
         # Filter hidden files and directories
         candidate_files = self._filter_hidden_files(
-            candidate_files, search_path, args.include_hidden
+            candidate_files, search_path, include_hidden
         )
 
         # Filter text files
@@ -500,13 +518,21 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
     # =============================================================================
 
     async def _execute_search(
-        self, files: list[Path], args: GrepArgs
+        self,
+        files: list[Path],
+        query: str,
+        case_sensitive: bool,
+        regex: bool,
+        max_results: int,
     ) -> list[SearchResult]:
         """Execute search across multiple files.
 
         Args:
             files: List of text file paths to search.
-            args: GrepArgs with search options.
+            query: Search query or regex pattern.
+            case_sensitive: Whether to perform case-sensitive search.
+            regex: Whether to interpret query as regex pattern.
+            max_results: Maximum number of matches to return.
 
         Returns:
             List of search results with file path and matches.
@@ -514,18 +540,18 @@ class GrepTool(BaseTool[GrepArgs, GrepResult, GrepToolConfig, GrepToolState]):
         results: list[SearchResult] = []
         total_matches = 0
 
-        regex = self._create_search_regex(args.query, args.case_sensitive, args.regex)
+        search_regex = self._create_search_regex(query, case_sensitive, regex)
 
         for file_path in files:
             # Calculate remaining capacity for this file
-            remaining_capacity = args.max_results - total_matches
+            remaining_capacity = max_results - total_matches
             if remaining_capacity <= 0:
                 break
 
             try:
                 content = file_path.read_text(encoding="utf-8", errors="ignore")
                 file_matches = self._search_file_content(
-                    content, regex, remaining_capacity
+                    content, search_regex, remaining_capacity
                 )
 
                 if file_matches:

@@ -25,10 +25,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import time
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.base import BaseTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import (
     LENGTH_DIFF_RATIO_THRESHOLD,
@@ -84,44 +85,11 @@ class WarnedOperation(BaseModel):
 
 
 # =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class EditToolConfig(BaseToolConfig):
-    """Configuration for EditTool.
-
-    Extends BaseToolConfig to include the optional ViewTrackerService dependency.
-
-    Attributes:
-        view_tracker: Optional service for tracking file views during the session.
-    """
-
-    view_tracker: ViewTrackerService | None = None
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-class EditToolState(BaseToolState):
-    """State for EditTool.
-
-    Tracks warned operations for retry logic.
-
-    Attributes:
-        warned_operations: Dictionary tracking warned edit operations by file path.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    warned_operations: dict[str, WarnedOperation] = Field(default_factory=dict)
-
-
-# =============================================================================
 # EditTool Implementation
 # =============================================================================
 
 
-class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
+class EditTool(BaseTool):
     """Tool for replacing entire file content with comprehensive safety checks.
 
     This tool provides safe file editing operations with multiple safety features:
@@ -132,26 +100,46 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
 
     The tool is designed for full file content replacement. For targeted string
     replacement, use EditFileTool instead.
-
-    Attributes:
-        name: Tool name identifier.
-        description: Description of tool functionality.
-        args_schema: Pydantic model for input validation.
     """
 
-    name = "edit"
-    description = (
-        "Replace entire file content with safety checks "
-        "(use 'edit_file' for str_replace)"
-    )
-    args_schema: type[EditArgs] = EditArgs
+    # Class attributes for compatibility (set via __init__ but accessible as class attrs)
+    name: str = "edit"
+    description: str = "Replace entire file content with safety checks (use 'edit_file' for str_replace)"
 
     # Constants matching TypeScript implementation
     _HASH_MULTIPLIER: int = 31
     _BIT_MASK_32: int = 0x1_00_00_00_00  # 2^32
     _BASE_36: int = 36
 
-    async def run(self, args: EditArgs) -> EditResult:
+    def __init__(
+        self,
+        view_tracker: ViewTrackerService | None = None,
+        workdir: Path | None = None,
+    ) -> None:
+        """Initialize EditTool.
+
+        Args:
+            view_tracker: Optional service for tracking file views.
+            workdir: Working directory for path resolution. Defaults to cwd if None.
+        """
+        super().__init__(
+            name="edit",
+            description="Replace entire file content with safety checks (use 'edit_file' for str_replace)",
+            args_schema=EditArgs,
+        )
+        self._view_tracker = view_tracker
+        self._workdir = workdir or Path.cwd()
+        self._warned_operations: dict[str, WarnedOperation] = {}
+
+    def _run(self, **kwargs: Any) -> str:
+        """Synchronous execution not supported."""
+        raise NotImplementedError("EditTool only supports async execution")
+
+    async def _arun(
+        self,
+        path: str,
+        file_text: str,
+    ) -> EditResult:
         """Execute the edit tool operation.
 
         Replaces the entire content of an existing file with the provided content.
@@ -159,7 +147,8 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
         mistaken edit commands.
 
         Args:
-            args: EditArgs containing path and file_text.
+            path: File path (absolute or relative to working directory).
+            file_text: New entire content to write to the file.
 
         Returns:
             EditResult with success or error message.
@@ -168,7 +157,7 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
             FileSystemError: If path resolution, file operations, or validation fails.
         """
         # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        resolved_path = self._resolve_path(path)
 
         # Clean up expired warnings periodically
         self._cleanup_expired_warnings()
@@ -184,9 +173,8 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
             )
 
         # Check if file was viewed before editing
-        if (
-            self.config.view_tracker is None
-            or not self.config.view_tracker.has_been_viewed(str(resolved_path))
+        if self._view_tracker is None or not self._view_tracker.has_been_viewed(
+            str(resolved_path)
         ):
             raise FileSystemError(
                 message=f"File '{resolved_path}' must be viewed before editing\n\n"
@@ -197,8 +185,10 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
             )
 
         # Check if file was modified after the last view
-        last_view_timestamp = self.config.view_tracker.get_last_view_timestamp(
-            str(resolved_path)
+        last_view_timestamp = (
+            self._view_tracker.get_last_view_timestamp(str(resolved_path))
+            if self._view_tracker
+            else None
         )
         if last_view_timestamp is not None:
             try:
@@ -222,18 +212,16 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
         old_content = resolved_path.read_text(encoding="utf-8")
 
         # Check if this is a likely mistaken edit (should be edit_file instead)
-        if self._is_likely_mistaken_edit(
-            old_content, args.file_text, str(resolved_path)
-        ):
+        if self._is_likely_mistaken_edit(old_content, file_text, str(resolved_path)):
             old_content_hash = self._hash_content(old_content)
-            new_content_hash = self._hash_content(args.file_text)
+            new_content_hash = self._hash_content(file_text)
 
             # Check if this is a retry of a previously warned operation
             if self._check_for_retry(
                 str(resolved_path), old_content_hash, new_content_hash
             ):
                 # This is a retry - allow the operation and clean up the warning
-                self.state.warned_operations.pop(str(resolved_path), None)
+                self._warned_operations.pop(str(resolved_path), None)
             else:
                 # First time warning - track the operation and throw the error
                 self._record_warning(
@@ -256,10 +244,11 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
                 )
 
         # Write new content with UTF-8 encoding
-        resolved_path.write_text(args.file_text, encoding="utf-8")
+        resolved_path.write_text(file_text, encoding="utf-8")
 
         # Record view after successful edit
-        self.config.view_tracker.record_view(str(resolved_path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(str(resolved_path))
 
         return EditResult(output=f"File '{resolved_path}' modified successfully")
 
@@ -279,7 +268,7 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
+            return (self._workdir / path).resolve()
 
     # =============================================================================
     # Hash Function (matching TypeScript implementation)
@@ -441,16 +430,16 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
         Returns:
             True if this is a valid retry, False otherwise.
         """
-        if file_path not in self.state.warned_operations:
+        if file_path not in self._warned_operations:
             return False
 
-        warning = self.state.warned_operations[file_path]
+        warning = self._warned_operations[file_path]
         current_time = int(time.time() * 1000)
         time_diff = current_time - warning.timestamp
 
         if time_diff > MISTAKEN_EDIT_TIMEOUT_MS:
             # Expired warning, remove it
-            del self.state.warned_operations[file_path]
+            del self._warned_operations[file_path]
             return False
 
         # Check if hashes match (same operation)
@@ -471,7 +460,7 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
             old_content_hash: Hash of the old content.
             new_content_hash: Hash of the new content.
         """
-        self.state.warned_operations[file_path] = WarnedOperation(
+        self._warned_operations[file_path] = WarnedOperation(
             timestamp=int(time.time() * 1000),
             old_content_hash=old_content_hash,
             new_content_hash=new_content_hash,
@@ -482,9 +471,9 @@ class EditTool(BaseTool[EditArgs, EditResult, EditToolConfig, EditToolState]):
         current_time = int(time.time() * 1000)
 
         expired_keys = []
-        for key, warning in self.state.warned_operations.items():
+        for key, warning in self._warned_operations.items():
             if current_time - warning.timestamp >= MISTAKEN_EDIT_TIMEOUT_MS:
                 expired_keys.append(key)
 
         for key in expired_keys:
-            self.state.warned_operations.pop(key, None)
+            self._warned_operations.pop(key, None)

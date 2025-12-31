@@ -25,11 +25,12 @@ from __future__ import annotations
 
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import ClassVar
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.base import BaseTool
+from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import OUTPUT_LIMIT, FileSystemError
 
 # =============================================================================
@@ -70,41 +71,11 @@ class ListFilesResult(BaseModel):
 
 
 # =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class ListFilesToolConfig(BaseToolConfig):
-    """Configuration for ListFilesTool.
-
-    Extends BaseToolConfig without additional fields.
-    """
-
-    model_config: ClassVar[dict[str, str]] = {"extra": "allow"}
-
-
-class ListFilesToolState(BaseToolState):
-    """State for ListFilesTool.
-
-    Currently empty but reserved for future features.
-
-    Attributes:
-        (none currently - reserved for future use)
-    """
-
-    model_config: ClassVar[dict[str, str]] = {"extra": "forbid"}
-
-    pass
-
-
-# =============================================================================
 # ListFilesTool Implementation
 # =============================================================================
 
 
-class ListFilesTool(
-    BaseTool[ListFilesArgs, ListFilesResult, ListFilesToolConfig, ListFilesToolState]
-):
+class ListFilesTool(BaseTool):
     """Tool for listing files and directories with pattern matching and metadata.
 
     This tool provides comprehensive file and directory discovery capabilities:
@@ -113,30 +84,61 @@ class ListFilesTool(
 
     When patterns are provided, it operates in find_files mode.
     When no patterns are provided, it operates in list mode.
-
-    Attributes:
-        name: Tool name identifier.
-        description: Description of tool functionality.
-        args_schema: Pydantic model for input validation.
-        config: Tool configuration.
-        state: Tool state for tracking operations.
     """
 
-    name = "list_files"
-    description = "List files and directories with pattern matching and metadata. Use patterns for find_files mode, or list directory contents."
-    args_schema: type[ListFilesArgs] = ListFilesArgs
+    # Class attributes for compatibility (set via __init__ but accessible as class attrs)
+    name: str = "list_files"
+    description: str = "List files and directories with pattern matching and metadata. Use patterns for find_files mode, or list directory contents."
 
     # Constants
     _BYTE_SIZE_THRESHOLD: int = 1024  # Bytes per KB
 
-    async def run(self, args: ListFilesArgs) -> ListFilesResult:
+    def __init__(
+        self,
+        view_tracker: ViewTrackerService | None = None,
+        workdir: Path | None = None,
+    ) -> None:
+        """Initialize ListFilesTool.
+
+        Args:
+            view_tracker: Optional service for tracking file views.
+            workdir: Working directory for path resolution. Defaults to cwd if None.
+        """
+        super().__init__(
+            name="list_files",
+            description="List files and directories with pattern matching and metadata. Use patterns for find_files mode, or list directory contents.",
+            args_schema=ListFilesArgs,
+        )
+        self._view_tracker = view_tracker
+        self._workdir = workdir or Path.cwd()
+
+    def _run(self, **kwargs: Any) -> str:
+        """Synchronous execution not supported."""
+        raise NotImplementedError("ListFilesTool only supports async execution")
+
+    async def _arun(
+        self,
+        path: str = ".",
+        patterns: list[str] = [],
+        exclude: list[str] = [],
+        recursive: bool = True,
+        max_results: int = 1000,
+        include_hidden: bool = False,
+        max_depth: int = 3,
+    ) -> ListFilesResult:
         """Execute the list_files tool operation.
 
         Determines whether to use find_files or list mode based on whether
         patterns are provided.
 
         Args:
-            args: ListFilesArgs containing path and operation options.
+            path: Directory path (absolute or relative to working directory).
+            patterns: List of glob patterns to match files against.
+            exclude: List of patterns to exclude matching files.
+            recursive: Whether to search subdirectories (default: True).
+            max_results: Maximum number of files to return (default: 1000, range: 1-10000).
+            include_hidden: Whether to include hidden files and directories (default: False).
+            max_depth: Maximum depth for recursive listing (default: 3, range: 1-10).
 
         Returns:
             ListFilesResult with formatted output.
@@ -145,16 +147,16 @@ class ListFilesTool(
             FileSystemError: If path resolution or file operations fail.
         """
         # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        resolved_path = self._resolve_path(path)
 
         # Validate path exists
         if not resolved_path.exists():
             raise FileSystemError(
-                message=f"Directory not found: '{args.path}'",
+                message=f"Directory not found: '{path}'",
                 code="DIRECTORY_NOT_FOUND",
                 path=str(resolved_path),
                 suggestions=[
-                    f"The specified directory doesn't exist in current working directory: {self.config.effective_workdir}",
+                    f"The specified directory doesn't exist in current working directory: {self._workdir}",
                     "Use 'list' command to explore available directories",
                     "Check if the path is correct",
                 ],
@@ -163,7 +165,7 @@ class ListFilesTool(
         # Check if path is a directory
         if not resolved_path.is_dir():
             raise FileSystemError(
-                message=f"Path is not a directory: '{args.path}'",
+                message=f"Path is not a directory: '{path}'",
                 code="PATH_NOT_DIRECTORY",
                 path=str(resolved_path),
                 suggestions=[
@@ -173,15 +175,19 @@ class ListFilesTool(
             )
 
         # Determine mode based on whether patterns are provided
-        if args.patterns:
+        if patterns:
             # find_files mode
-            output = await self._find_files(resolved_path, args)
+            output = await self._find_files(
+                resolved_path, patterns, exclude, recursive, max_results, include_hidden
+            )
         else:
             # list mode
-            output = await self._list(resolved_path, args)
+            output = await self._list(
+                resolved_path, recursive, max_results, include_hidden, max_depth
+            )
 
         # Apply output truncation
-        output = self._truncate_output(output, args.patterns is not None)
+        output = self._truncate_output(output, patterns is not None)
 
         return ListFilesResult(output=output)
 
@@ -201,18 +207,30 @@ class ListFilesTool(
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
+            return (self._workdir / path).resolve()
 
     # =============================================================================
     # find_files Command
     # =============================================================================
 
-    async def _find_files(self, root: Path, args: ListFilesArgs) -> str:
+    async def _find_files(
+        self,
+        root: Path,
+        patterns: list[str],
+        exclude: list[str],
+        recursive: bool,
+        max_results: int,
+        include_hidden: bool,
+    ) -> str:
         """Find files matching glob patterns.
 
         Args:
             root: Root directory to search in.
-            args: ListFilesArgs with patterns and options.
+            patterns: List of glob patterns to match files against.
+            exclude: List of patterns to exclude matching files.
+            recursive: Whether to search subdirectories.
+            max_results: Maximum number of files to return.
+            include_hidden: Whether to include hidden files.
 
         Returns:
             Formatted list of matching files.
@@ -220,10 +238,10 @@ class ListFilesTool(
         found_files: list[Path] = []
 
         # Process each pattern
-        for pattern in args.patterns:
+        for pattern in patterns:
             # Use pathlib glob for matching
             # rglob handles ** automatically, glob handles non-recursive
-            if args.recursive:
+            if recursive:
                 matches = root.rglob(pattern)
             else:
                 matches = root.glob(pattern)
@@ -234,16 +252,16 @@ class ListFilesTool(
                     continue
 
                 # Check hidden file filter
-                if not args.include_hidden and file_path.name.startswith("."):
+                if not include_hidden and file_path.name.startswith("."):
                     continue
 
                 # Check exclude patterns using relative path
                 relative_path = str(file_path.relative_to(root))
-                if self._matches_any_exclude(relative_path, args.exclude):
+                if self._matches_any_exclude(relative_path, exclude):
                     continue
 
                 # Check max results
-                if len(found_files) >= args.max_results:
+                if len(found_files) >= max_results:
                     break
 
                 # Avoid duplicates
@@ -252,7 +270,7 @@ class ListFilesTool(
 
         # Format output with relative paths
         if not found_files:
-            return f"No files found matching patterns: {', '.join(args.patterns)}"
+            return f"No files found matching patterns: {', '.join(patterns)}"
 
         # Sort files alphabetically (case-insensitive)
         found_files.sort(key=lambda p: str(p).casefold())
@@ -262,9 +280,7 @@ class ListFilesTool(
 
         file_list = "\n".join(relative_files)
         truncation_msg = (
-            f" (limited to {args.max_results})"
-            if len(found_files) >= args.max_results
-            else ""
+            f" (limited to {max_results})" if len(found_files) >= max_results else ""
         )
 
         return f"Found {len(found_files)} files{truncation_msg}\n\n{file_list}"
@@ -288,27 +304,37 @@ class ListFilesTool(
     # list Command
     # =============================================================================
 
-    async def _list(self, root: Path, args: ListFilesArgs) -> str:
+    async def _list(
+        self,
+        root: Path,
+        recursive: bool,
+        max_results: int,
+        include_hidden: bool,
+        max_depth: int,
+    ) -> str:
         """List directory contents.
 
         Args:
             root: Root directory to list.
-            args: ListFilesArgs with list options.
+            recursive: Whether to search subdirectories.
+            max_results: Maximum number of files to return.
+            include_hidden: Whether to include hidden files.
+            max_depth: Maximum depth for recursive listing.
 
         Returns:
             Formatted directory listing.
         """
-        if args.recursive:
-            return await self._list_recursive(root, args)
+        if recursive:
+            return await self._list_recursive(root, max_depth, include_hidden)
         else:
-            return self._list_single(root, args)
+            return self._list_single(root, include_hidden)
 
-    def _list_single(self, root: Path, args: ListFilesArgs) -> str:
+    def _list_single(self, root: Path, include_hidden: bool) -> str:
         """List directory contents (non-recursive).
 
         Args:
             root: Root directory to list.
-            args: ListFilesArgs with list options.
+            include_hidden: Whether to include hidden files.
 
         Returns:
             Formatted directory listing.
@@ -316,7 +342,7 @@ class ListFilesTool(
         entries = list(root.iterdir())
 
         # Filter hidden files if needed
-        if not args.include_hidden:
+        if not include_hidden:
             entries = [e for e in entries if not e.name.startswith(".")]
 
         # Sort: directories first, then files alphabetically (case-insensitive)
@@ -338,19 +364,19 @@ class ListFilesTool(
         return "\n".join(lines)
 
     async def _list_recursive(
-        self, root: Path, args: ListFilesArgs, current_depth: int = 0
+        self, root: Path, max_depth: int, include_hidden: bool, current_depth: int = 0
     ) -> str:
         """List directory contents recursively with tree structure.
 
         Args:
             root: Root directory to list.
-            args: ListFilesArgs with list options.
+            max_depth: Maximum depth for recursive listing.
+            include_hidden: Whether to include hidden files.
             current_depth: Current recursion depth.
 
         Returns:
             Formatted directory tree.
         """
-        max_depth = args.max_depth
 
         if current_depth >= max_depth:
             return ""
@@ -358,7 +384,7 @@ class ListFilesTool(
         entries = list(root.iterdir())
 
         # Filter hidden files if needed
-        if not args.include_hidden:
+        if not include_hidden:
             entries = [e for e in entries if not e.name.startswith(".")]
 
         # Sort: directories first, then files alphabetically (case-insensitive)
@@ -374,7 +400,7 @@ class ListFilesTool(
                 # Recurse into subdirectory
                 if current_depth + 1 < max_depth:
                     sub_result = await self._list_recursive(
-                        entry, args, current_depth + 1
+                        entry, max_depth, include_hidden, current_depth + 1
                     )
                     if sub_result:
                         lines.append(sub_result)

@@ -122,19 +122,22 @@ class TestListFilesResult:
 
 
 class TestToolConfiguration:
-    """Tests for tool configuration."""
+    """Tests for tool configuration and metadata."""
 
     def test_tool_name_is_list_files(self) -> None:
         """Test tool has correct name."""
-        assert ListFilesTool.name == "list_files"
+        tool = ListFilesTool()
+        assert tool.name == "list_files"
 
     def test_tool_has_description(self) -> None:
         """Test tool has description."""
-        assert len(ListFilesTool.description) > 0
+        tool = ListFilesTool()
+        assert len(tool.description) > 0
 
     def test_tool_uses_list_files_args_schema(self) -> None:
         """Test tool uses ListFilesArgs as schema."""
-        assert ListFilesTool.args_schema == ListFilesArgs
+        tool = ListFilesTool()
+        assert tool.args_schema == ListFilesArgs
 
 
 # =============================================================================
