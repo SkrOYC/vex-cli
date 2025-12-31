@@ -436,7 +436,7 @@ class TestLoggerMiddleware:
             patch("vibe.core.engine.langchain_middleware.logger") as mock_logger,
             patch(
                 "vibe.core.engine.langchain_middleware.isinstance", return_value=True
-            ) as mock_isinstance,
+            ),
         ):
             result = middleware.wrap_tool_call(request, mock_handler)
             assert result == mock_result
