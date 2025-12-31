@@ -28,8 +28,6 @@ from vibe.core.tools.filesystem.create import (
     CreateArgs,
     CreateResult,
     CreateTool,
-    CreateToolConfig,
-    CreateToolState,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
@@ -53,37 +51,17 @@ def view_tracker() -> ViewTrackerService:
 
 
 @pytest.fixture
-def tool_config(temp_dir: Path) -> CreateToolConfig:
-    """Create a CreateToolConfig without view tracking."""
-    return CreateToolConfig(workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_config_with_view_tracker(
-    view_tracker: ViewTrackerService, temp_dir: Path
-) -> CreateToolConfig:
-    """Create a CreateToolConfig with ViewTrackerService."""
-    return CreateToolConfig(view_tracker=view_tracker, workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_state() -> CreateToolState:
-    """Create a fresh CreateToolState for each test."""
-    return CreateToolState()
-
-
-@pytest.fixture
-def tool(tool_config: CreateToolConfig, tool_state: CreateToolState) -> CreateTool:
+def tool(temp_dir: Path) -> CreateTool:
     """Create a CreateTool instance for testing."""
-    return CreateTool(config=tool_config, state=tool_state)
+    return CreateTool(workdir=temp_dir)
 
 
 @pytest.fixture
 def tool_with_view_tracker(
-    tool_config_with_view_tracker: CreateToolConfig, tool_state: CreateToolState
+    view_tracker: ViewTrackerService, temp_dir: Path
 ) -> CreateTool:
     """Create a CreateTool instance with view tracking for testing."""
-    return CreateTool(config=tool_config_with_view_tracker, state=tool_state)
+    return CreateTool(view_tracker=view_tracker, workdir=temp_dir)
 
 
 # =============================================================================
@@ -133,41 +111,6 @@ class TestCreateResult:
         """Test CreateResult can be created with output."""
         result = CreateResult(output="File created successfully.")
         assert result.output == "File created successfully."
-
-
-# =============================================================================
-# CreateToolConfig Tests
-# =============================================================================
-
-
-class TestCreateToolConfig:
-    """Tests for CreateToolConfig."""
-
-    def test_creation_with_defaults(self) -> None:
-        """Test CreateToolConfig can be created with defaults."""
-        config = CreateToolConfig()
-        assert config.permission.value == "ask"
-        assert config.view_tracker is None
-
-    def test_creation_with_view_tracker(self) -> None:
-        """Test CreateToolConfig accepts ViewTrackerService."""
-        tracker = ViewTrackerService()
-        config = CreateToolConfig(view_tracker=tracker)
-        assert config.view_tracker is tracker
-
-
-# =============================================================================
-# CreateToolState Tests
-# =============================================================================
-
-
-class TestCreateToolState:
-    """Tests for CreateToolState."""
-
-    def test_creation_with_defaults(self) -> None:
-        """Test CreateToolState can be created with defaults."""
-        CreateToolState()
-        # State should be empty - no attributes defined
 
 
 # =============================================================================

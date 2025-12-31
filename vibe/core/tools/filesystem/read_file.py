@@ -13,10 +13,10 @@ Features:
 
 Example:
     ```python
-    from vibe.core.tools.filesystem.read_file import ReadFileTool, ReadFileArgs
+    from vibe.core.tools.filesystem.read_file import ReadFileTool
 
-    tool = ReadFileTool(config=tool_config, state=tool_state)
-    result = await tool.run(ReadFileArgs(path="test.py", view_type="content"))
+    tool = ReadFileTool(workdir=Path("/project"))
+    result = await tool.arun(path="test.py", view_type="content")
     ```
 """
 
@@ -28,9 +28,9 @@ import mimetypes
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.base import BaseTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import (
     LARGE_FILE_THRESHOLD,
@@ -127,47 +127,11 @@ class ReadFileResult(BaseModel):
 
 
 # =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class ReadFileToolConfig(BaseToolConfig):
-    """Configuration for ReadFileTool.
-
-    Extends BaseToolConfig to include the ViewTrackerService dependency.
-
-    Attributes:
-        view_tracker: Service for tracking file views during the session.
-    """
-
-    view_tracker: ViewTrackerService | None = None
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-class ReadFileToolState(BaseToolState):
-    """State for ReadFileTool.
-
-    Currently empty but reserved for future features like caching.
-
-    Attributes:
-        (none currently - reserved for future use)
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    # Reserved for future features like outline caching
-    pass
-
-
-# =============================================================================
 # ReadFileTool Implementation
 # =============================================================================
 
 
-class ReadFileTool(
-    BaseTool[ReadFileArgs, ReadFileResult, ReadFileToolConfig, ReadFileToolState]
-):
+class ReadFileTool(BaseTool):
     """Tool for viewing files with smart outline mode and media support.
 
     This tool provides comprehensive file viewing capabilities:
@@ -176,18 +140,26 @@ class ReadFileTool(
     - Media view: Base64-encoded images and audio files
     - Smart switching: Auto mode selects appropriate view based on file size
     - Directory viewing: List or outline mode for directories
-
-    Attributes:
-        name: Tool name identifier.
-        description: Description of tool functionality.
-        args_schema: Pydantic model for input validation.
-        config: Tool configuration including ViewTrackerService.
-        state: Tool state for tracking operations.
     """
 
-    name = "read_file"
-    description = "View files with smart outline mode and media support. Shows file content with line numbers, code structure outlines, or embeds media files."
-    args_schema: type[ReadFileArgs] = ReadFileArgs
+    def __init__(
+        self,
+        view_tracker: ViewTrackerService | None = None,
+        workdir: Path | None = None,
+    ) -> None:
+        """Initialize ReadFileTool.
+
+        Args:
+            view_tracker: Optional service for tracking file views.
+            workdir: Working directory for path resolution. Defaults to cwd if None.
+        """
+        super().__init__(
+            name="read_file",
+            description="View files with smart outline mode and media support. Shows file content with line numbers, code structure outlines, or embeds media files.",
+            args_schema=ReadFileArgs,
+        )
+        self._view_tracker = view_tracker
+        self._workdir = workdir or Path.cwd()
 
     # Supported file extensions
     _PYTHON_EXTENSIONS: ClassVar[set[str]] = {".py", ".pyw", ".py3", ".pyi"}
@@ -209,14 +181,27 @@ class ReadFileTool(
         ".m4a",
     }
 
-    async def run(self, args: ReadFileArgs) -> ReadFileResult:
+    async def _arun(
+        self,
+        path: str,
+        view_type: Literal["content", "outline", "auto"] = "auto",
+        view_range: tuple[int, int] | None = None,
+        recursive: bool = False,
+        include_patterns: list[str] | None = None,
+    ) -> ReadFileResult:
         """Execute the read_file tool operation.
 
         Determines whether to view a file or directory, and selects the appropriate
         view mode based on the arguments and file type.
 
         Args:
-            args: ReadFileArgs containing path and view options.
+            path: File path (absolute or relative to working directory).
+            view_type: How to view the file content - "content" shows file with line
+                numbers, "outline" shows code structure, "auto" uses smart switching.
+            view_range: Optional tuple of [start, end] lines (1-based, -1 for end).
+                Only valid for content view mode.
+            recursive: Whether to recursively include subdirectories (for directories).
+            include_patterns: File patterns to include (for directories with outline mode).
 
         Returns:
             ReadFileResult with content, outline, or media data.
@@ -225,16 +210,16 @@ class ReadFileTool(
             FileSystemError: If path resolution or file operations fail.
         """
         # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        resolved_path = self._resolve_path(path)
 
         # Check if path exists
         if not resolved_path.exists():
             raise FileSystemError(
-                message=f"File not found: '{args.path}'",
+                message=f"File not found: '{path}'",
                 code="FILE_NOT_FOUND",
                 path=str(resolved_path),
                 suggestions=[
-                    f"The specified path doesn't exist in current working directory: {self.config.effective_workdir}",
+                    f"The specified path doesn't exist in current working directory: {self._workdir}",
                     "Use 'list' command to explore available directories",
                     "Check if the path is correct",
                 ],
@@ -242,7 +227,21 @@ class ReadFileTool(
 
         # Check if path is a directory
         if resolved_path.is_dir():
-            result = await self._view_directory(resolved_path, args)
+            # Validate that view_range is not used with directories
+            if view_range is not None:
+                raise FileSystemError(
+                    message="viewRange cannot be used with directories",
+                    code="INVALID_ARGUMENT",
+                    path=str(resolved_path),
+                    suggestions=[
+                        'Use viewType="outline" to get code structure overview',
+                        'Use "list" command for directory contents and file metadata',
+                        "Remove viewRange parameter when viewing directories",
+                    ],
+                )
+            result = await self._view_directory(
+                resolved_path, path, view_type, recursive, include_patterns
+            )
             return ReadFileResult(content=result)
 
         # Path is a file - check if it's a media file
@@ -252,12 +251,16 @@ class ReadFileTool(
 
         # It's a text file - determine view type and view
         effective_view_type = self._determine_effective_view_type(
-            resolved_path, args.view_type, args.view_range
+            resolved_path, view_type, view_range
         )
         result = await self._view_text_file(
-            resolved_path, effective_view_type, args.view_range
+            resolved_path, effective_view_type, view_range
         )
         return ReadFileResult(content=result)
+
+    def _run(self, **kwargs: Any) -> str:
+        """Synchronous execution not supported."""
+        raise NotImplementedError("ReadFileTool only supports async execution")
 
     # =============================================================================
     # Path Resolution
@@ -275,7 +278,7 @@ class ReadFileTool(
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
+            return (self._workdir / path).resolve()
 
     # =============================================================================
     # View Type Determination
@@ -520,8 +523,8 @@ class ReadFileTool(
         output = self._truncate_output(output)
 
         # Record view
-        if self.config.view_tracker is not None:
-            self.config.view_tracker.record_view(str(path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(str(path))
 
         return ReadFileContentResult(output=output, line_count=line_count)
 
@@ -783,8 +786,8 @@ class ReadFileTool(
             limit_str = self._format_file_size(MAX_INLINE_MEDIA_BYTES)
 
             # Record view even for large files
-            if self.config.view_tracker is not None:
-                self.config.view_tracker.record_view(str(path))
+            if self._view_tracker is not None:
+                self._view_tracker.record_view(str(path))
 
             # Return guidance for large files
             raise FileSystemError(
@@ -821,8 +824,8 @@ class ReadFileTool(
         mime_type = self._get_mime_type(path)
 
         # Record view
-        if self.config.view_tracker is not None:
-            self.config.view_tracker.record_view(str(path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(str(path))
 
         return ReadFileMediaResult(
             type=media_type,
@@ -857,13 +860,21 @@ class ReadFileTool(
     # =============================================================================
 
     async def _view_directory(
-        self, path: Path, args: ReadFileArgs
+        self,
+        path: Path,
+        path_str: str,
+        view_type: str,
+        recursive: bool,
+        include_patterns: list[str] | None,
     ) -> ReadFileContentResult:
         """View a directory in list or outline mode.
 
         Args:
             path: Path to the directory.
-            args: ReadFileArgs with view options.
+            path_str: String path for error messages.
+            view_type: How to view the directory - "content" or "outline".
+            recursive: Whether to include subdirectories recursively.
+            include_patterns: File patterns to include (for outline mode).
 
         Returns:
             ReadFileContentResult with directory listing.
@@ -871,18 +882,8 @@ class ReadFileTool(
         Raises:
             FileSystemError: If view_range is specified for a directory.
         """
-        # view_range cannot be used with directories
-        if args.view_range is not None:
-            raise FileSystemError(
-                message="viewRange cannot be used with directories",
-                code="INVALID_ARGUMENT",
-                path=str(path),
-                suggestions=[
-                    'Use viewType="outline" to get code structure overview',
-                    'Use "list" command for directory contents and file metadata',
-                    "Remove viewRange parameter when viewing directories",
-                ],
-            )
+        # view_range cannot be used with directories - view_range parameter doesn't exist for _view_directory
+        # so we don't need to check it anymore since we're using unpacked parameters
 
         try:
             entries = list(path.iterdir())
@@ -897,8 +898,10 @@ class ReadFileTool(
                 ],
             ) from e
 
-        if args.view_type == "outline":
-            return await self._view_directory_outline(path, entries, args)
+        if view_type == "outline":
+            return await self._view_directory_outline(
+                path, entries, path_str, recursive, include_patterns
+            )
         else:
             return self._view_directory_list(path, entries)
 
@@ -939,20 +942,27 @@ class ReadFileTool(
             output += "\n\n... [directory listing truncated after 80_000 characters]"
 
         # Record view
-        if self.config.view_tracker is not None:
-            self.config.view_tracker.record_view(str(path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(str(path))
 
         return ReadFileContentResult(output=output, line_count=line_count)
 
     async def _view_directory_outline(
-        self, path: Path, entries: list[Path], args: ReadFileArgs
+        self,
+        path: Path,
+        entries: list[Path],
+        path_str: str,
+        recursive: bool,
+        include_patterns: list[str] | None,
     ) -> ReadFileContentResult:
         """View directory contents with code outlines for Python files.
 
         Args:
             path: Path to the directory.
             entries: List of entries in the directory.
-            args: ReadFileArgs with view options.
+            path_str: String path for view tracking.
+            recursive: Whether to process subdirectories recursively.
+            include_patterns: File patterns to include.
 
         Returns:
             ReadFileContentResult with directory outline.
@@ -966,8 +976,8 @@ class ReadFileTool(
             lines.append("  [No Python files found in directory]")
             output = "\n".join(lines)
 
-            if self.config.view_tracker is not None:
-                self.config.view_tracker.record_view(str(path))
+            if self._view_tracker is not None:
+                self._view_tracker.record_view(path_str)
 
             return ReadFileContentResult(output=output, line_count=len(entries))
 
@@ -1001,8 +1011,8 @@ class ReadFileTool(
             output += "\n\n... [directory outline truncated after 80_000 characters]"
 
         # Record view
-        if self.config.view_tracker is not None:
-            self.config.view_tracker.record_view(str(path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(path_str)
 
         return ReadFileContentResult(output=output, line_count=line_count)
 

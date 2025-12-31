@@ -34,8 +34,6 @@ from vibe.core.tools.filesystem.read_file import (
     ReadFileMediaResult,
     ReadFileResult,
     ReadFileTool,
-    ReadFileToolConfig,
-    ReadFileToolState,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
@@ -63,37 +61,15 @@ def view_tracker() -> ViewTrackerService:
 
 
 @pytest.fixture
-def tool_config(view_tracker: ViewTrackerService, temp_dir: Path) -> ReadFileToolConfig:
-    """Create a ReadFileToolConfig with ViewTrackerService."""
-    return ReadFileToolConfig(view_tracker=view_tracker, workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_config_no_view_tracker(temp_dir: Path) -> ReadFileToolConfig:
-    """Create a ReadFileToolConfig without ViewTrackerService."""
-    return ReadFileToolConfig(workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_state() -> ReadFileToolState:
-    """Create a fresh ReadFileToolState for each test."""
-    return ReadFileToolState()
-
-
-@pytest.fixture
-def tool(
-    tool_config: ReadFileToolConfig, tool_state: ReadFileToolState
-) -> ReadFileTool:
+def tool(view_tracker: ViewTrackerService, temp_dir: Path) -> ReadFileTool:
     """Create a ReadFileTool instance for testing."""
-    return ReadFileTool(config=tool_config, state=tool_state)
+    return ReadFileTool(view_tracker=view_tracker, workdir=temp_dir)
 
 
 @pytest.fixture
-def tool_no_view_tracker(
-    tool_config_no_view_tracker: ReadFileToolConfig, tool_state: ReadFileToolState
-) -> ReadFileTool:
+def tool_no_view_tracker(temp_dir: Path) -> ReadFileTool:
     """Create a ReadFileTool instance without ViewTrackerService."""
-    return ReadFileTool(config=tool_config_no_view_tracker, state=tool_state)
+    return ReadFileTool(workdir=temp_dir)
 
 
 # =============================================================================

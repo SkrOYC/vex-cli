@@ -14,20 +14,21 @@ Features:
 
 Example:
     ```python
-    from vibe.core.tools.filesystem.create import CreateTool, CreateArgs
+    from vibe.core.tools.filesystem.create import CreateTool
 
-    tool = CreateTool(config=tool_config, state=tool_state)
-    result = await tool.run(CreateArgs(path="test.py", file_text="print('hello')"))
+    tool = CreateTool(workdir=Path("/project"))
+    result = await tool.arun(path="test.py", file_text="print('hello')")
     ```
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.base import BaseTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
 
@@ -59,44 +60,11 @@ class CreateResult(BaseModel):
 
 
 # =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class CreateToolConfig(BaseToolConfig):
-    """Configuration for CreateTool.
-
-    Extends BaseToolConfig to include the optional ViewTrackerService dependency.
-
-    Attributes:
-        view_tracker: Optional service for tracking file views during the session.
-    """
-
-    view_tracker: ViewTrackerService | None = None
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-class CreateToolState(BaseToolState):
-    """State for CreateTool.
-
-    Currently empty but reserved for future features.
-
-    Attributes:
-        (none currently - reserved for future use)
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    pass
-
-
-# =============================================================================
 # CreateTool Implementation
 # =============================================================================
 
 
-class CreateTool(BaseTool[CreateArgs, CreateResult, CreateToolConfig, CreateToolState]):
+class CreateTool(BaseTool):
     """Tool for creating new files with strict safety guarantees.
 
     This tool provides safe file creation operations with the following characteristics:
@@ -111,27 +79,40 @@ class CreateTool(BaseTool[CreateArgs, CreateResult, CreateToolConfig, CreateTool
     - Has no modification detection (only creates new files)
     - Has no mistaken edit detection (not applicable for new files)
     - Has no retry logic (not applicable for new files)
-
-    Attributes:
-        name: Tool name identifier.
-        description: Description of tool functionality.
-        args_schema: Pydantic model for input validation.
-        config: Tool configuration including optional ViewTrackerService.
-        state: Tool state for tracking operations.
     """
 
-    name = "create"
-    description = "Create new files (use 'edit' to replace entire file)"
-    args_schema: type[CreateArgs] = CreateArgs
+    def __init__(
+        self,
+        view_tracker: ViewTrackerService | None = None,
+        workdir: Path | None = None,
+    ) -> None:
+        """Initialize CreateTool.
 
-    async def run(self, args: CreateArgs) -> CreateResult:
+        Args:
+            view_tracker: Optional service for tracking file views.
+            workdir: Working directory for path resolution. Defaults to cwd if None.
+        """
+        super().__init__(
+            name="create",
+            description="Create new files (use 'edit' to replace entire file)",
+            args_schema=CreateArgs,
+        )
+        self._view_tracker = view_tracker
+        self._workdir = workdir or Path.cwd()
+
+    async def _arun(
+        self,
+        path: str,
+        file_text: str,
+    ) -> CreateResult:
         """Execute the create tool operation.
 
         Creates a new file with the specified content. Fails if the file already
         exists, matching TypeScript FileEditor.create() behavior exactly.
 
         Args:
-            args: CreateArgs containing path and file_text.
+            path: File path (absolute or relative to working directory).
+            file_text: Content to write to the file.
 
         Returns:
             CreateResult with success message.
@@ -140,7 +121,7 @@ class CreateTool(BaseTool[CreateArgs, CreateResult, CreateToolConfig, CreateTool
             FileSystemError: If file already exists or file operations fail.
         """
         # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        resolved_path = self._resolve_path(path)
 
         # Check if file already exists - STRICT check, no overwrite option
         if resolved_path.exists():
@@ -154,13 +135,17 @@ class CreateTool(BaseTool[CreateArgs, CreateResult, CreateToolConfig, CreateTool
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write file with UTF-8 encoding
-        resolved_path.write_text(args.file_text, encoding="utf-8")
+        resolved_path.write_text(file_text, encoding="utf-8")
 
         # Record view after successful creation (optional, for edit workflow)
-        if self.config.view_tracker is not None:
-            self.config.view_tracker.record_view(str(resolved_path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(str(resolved_path))
 
         return CreateResult(output=f"File '{resolved_path}' created successfully")
+
+    def _run(self, **kwargs: Any) -> str:
+        """Synchronous execution not supported."""
+        raise NotImplementedError("CreateTool only supports async execution")
 
     # =============================================================================
     # Path Resolution
@@ -178,4 +163,4 @@ class CreateTool(BaseTool[CreateArgs, CreateResult, CreateToolConfig, CreateTool
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
+            return (self._workdir / path).resolve()
