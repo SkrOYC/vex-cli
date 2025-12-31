@@ -29,54 +29,20 @@ class TestToolLangChainCompatibility:
         with tempfile.TemporaryDirectory() as tmpdir:
             yield Path(tmpdir)
 
-    def test_read_file_tool_is_langchain_basetool(self, temp_dir):
-        """Test ReadFileTool is a LangChain BaseTool."""
-        tool = ReadFileTool(workdir=temp_dir)
-        assert isinstance(tool, BaseTool)
-        assert hasattr(tool, "name")
-        assert hasattr(tool, "description")
-        assert hasattr(tool, "args_schema")
-        assert hasattr(tool, "_arun")
-
-    def test_edit_file_tool_is_langchain_basetool(self, temp_dir):
-        """Test EditFileTool is a LangChain BaseTool."""
-        tool = EditFileTool(workdir=temp_dir)
-        assert isinstance(tool, BaseTool)
-        assert hasattr(tool, "name")
-        assert hasattr(tool, "description")
-        assert hasattr(tool, "args_schema")
-        assert hasattr(tool, "_arun")
-
-    def test_create_tool_is_langchain_basetool(self, temp_dir):
-        """Test CreateTool is a LangChain BaseTool."""
-        tool = CreateTool(workdir=temp_dir)
-        assert isinstance(tool, BaseTool)
-        assert hasattr(tool, "name")
-        assert hasattr(tool, "description")
-        assert hasattr(tool, "args_schema")
-        assert hasattr(tool, "_arun")
-
-    def test_list_files_tool_is_langchain_basetool(self, temp_dir):
-        """Test ListFilesTool is a LangChain BaseTool."""
-        tool = ListFilesTool(workdir=temp_dir)
-        assert isinstance(tool, BaseTool)
-        assert hasattr(tool, "name")
-        assert hasattr(tool, "description")
-        assert hasattr(tool, "args_schema")
-        assert hasattr(tool, "_arun")
-
-    def test_grep_tool_is_langchain_basetool(self, temp_dir):
-        """Test GrepTool is a LangChain BaseTool."""
-        tool = GrepTool(workdir=temp_dir)
-        assert isinstance(tool, BaseTool)
-        assert hasattr(tool, "name")
-        assert hasattr(tool, "description")
-        assert hasattr(tool, "args_schema")
-        assert hasattr(tool, "_arun")
-
-    def test_insert_line_tool_is_langchain_basetool(self, temp_dir):
-        """Test InsertLineTool is a LangChain BaseTool."""
-        tool = InsertLineTool(workdir=temp_dir)
+    @pytest.mark.parametrize(
+        "tool_class",
+        [
+            ReadFileTool,
+            EditFileTool,
+            CreateTool,
+            ListFilesTool,
+            GrepTool,
+            InsertLineTool,
+        ],
+    )
+    def test_tool_is_langchain_basetool(self, temp_dir, tool_class):
+        """Test that tools are LangChain BaseTool compatible."""
+        tool = tool_class(workdir=temp_dir)
         assert isinstance(tool, BaseTool)
         assert hasattr(tool, "name")
         assert hasattr(tool, "description")
@@ -90,6 +56,7 @@ class TestToolLangChainCompatibility:
         test_file.write_text("test content", encoding="utf-8")
 
         tool = ReadFileTool(workdir=temp_dir)
-        result = await tool._arun(path=str(test_file))
+        result = await tool._arun(path=str(test_file), view_type="content")
 
+        assert result.content is not None
         assert "test content" in result.content.output

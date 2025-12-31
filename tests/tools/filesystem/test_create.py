@@ -10,8 +10,6 @@ Tests cover all acceptance criteria including:
 - Permission errors handled correctly
 - Error message format validation (exact TypeScript match)
 - Success message format validation (exact TypeScript match)
-- View tracking called after creation (if configured)
-- View tracking is optional
 - All tests achieve >85% coverage
 """
 

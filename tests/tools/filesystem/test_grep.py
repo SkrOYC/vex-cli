@@ -491,19 +491,17 @@ line9
     ) -> None:
         """Test error when no text files found."""
         # Create a directory with only truly binary files (null bytes)
-        # SKIPPED: Old API not supported - Path objects cause type validation errors
-        # binary_file = temp_dir / "test.bin"
-        # binary_file.write_bytes(b"\x00\x01\x02\x03\x04\x05")
-        #
-        # with pytest.raises(ValueError) as exc_info:
-        #     await grep_tool._arun(path=".", query="test")
-        #
-        #     error_msg = str(exc_info.value)
-        #     # Check for exact error format with • bullets
-        #     assert "No text files found" in error_msg
-        #     assert "• Use 'list' command to see what files are in directory" in error_msg
-        #     assert "• Specify a directory with known text files" in error_msg
-        pytest.skip("Old API not supported - Path objects cause type validation")
+        binary_file = temp_dir / "test.bin"
+        binary_file.write_bytes(b"\x00\x01\x02\x03\x04\x05")
+
+        with pytest.raises(ValueError) as exc_info:
+            await grep_tool._arun(path=".", query="test")
+
+        error_msg = str(exc_info.value)
+        # Check for exact error format with • bullets
+        assert "No text files found" in error_msg
+        assert "• Use 'list' command to see what files are in directory" in error_msg
+        assert "• Specify a directory with known text files" in error_msg
 
     async def test_invalid_regex_error(
         self, grep_tool: GrepTool, temp_dir: Path

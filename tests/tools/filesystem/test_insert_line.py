@@ -308,7 +308,7 @@ class TestLineOutOfBounds:
         file_path.write_text("", encoding="utf-8")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool._arun(path=str(file_path), new_str="content", insert_line=1)
+            await tool._arun(path=str(file_path), new_str="content", insert_line=2)
 
         assert exc_info.value.code == "LINE_OUT_OF_BOUNDS"
         assert "out of bounds" in str(exc_info.value)
@@ -672,7 +672,7 @@ class TestEdgeCases:
         # Write with UTF-8 encoding
         file_path.write_text("café\nnaïve\nélève", encoding="utf-8")
 
-        await tool._arun(path=str(file_path), new_str="SOME TEXT", insert_line=10)
+        await tool._arun(path=str(file_path), new_str="SOME TEXT", insert_line=2)
 
         # Read back and verify encoding is preserved
         content = file_path.read_text(encoding="utf-8")
