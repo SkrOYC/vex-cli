@@ -130,7 +130,7 @@ class VibeToolAdapter:
 
     @staticmethod
     def _create_vibe_tools(config: VibeConfig) -> list[BaseTool]:
-        """Create Vibe-specific tools (read_file, write_file, grep, etc.)."""
+        """Create Vibe-specific tools (create, edit, str_replace, insert_line, read_file, list_files, grep, etc.)."""
         from vibe.core.tools.registry import get_registered_tools
         
         tools: list[BaseTool] = []

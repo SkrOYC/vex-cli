@@ -255,7 +255,7 @@ class TestLangChainToolAdapter:
 
     def test_tool_adapter_get_all_tools(self, config: VibeConfig):
         """Test that VibeToolAdapter.get_all_tools works with LangChain config."""
-        from langchain_core.tools import BaseTool
+        from vibe.core.tools.base import BaseTool
 
         from vibe.core.engine.tools import VibeToolAdapter
 

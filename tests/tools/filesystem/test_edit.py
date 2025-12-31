@@ -34,11 +34,9 @@ from vibe.core.tools.filesystem.edit import (
     EditTool,
     EditToolConfig,
     EditToolState,
-    WarnedOperation,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
-
 
 # =============================================================================
 # Fixtures
@@ -729,7 +727,7 @@ class TestErrorMessageValidation:
         # Verify key phrases from TypeScript error message
         assert "mistaken usage" in error_message
         assert (
-            "Consider using 'edit_file'" in error_message
+            "Consider using 'str_replace'" in error_message
             or "str_replace" in error_message
         )
         assert (
