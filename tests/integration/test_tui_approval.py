@@ -6,11 +6,12 @@ with multi-tool interrupts, batch shortcuts, and progress display.
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from vibe.cli.textual_ui.app import VibeApp
+from vibe.cli.textual_ui.widgets.approval_app import ApprovalApp
 from vibe.core.config import VibeConfig
 from vibe.core.engine.langchain_engine import VibeLangChainEngine
 
@@ -336,157 +337,19 @@ class TestVibeAppMultiToolApproval:
                 assert calls[0]["name"] == "bash"
 
 
-class TestApprovalAppLogic:
-    """Test ApprovalApp logic without requiring Textual app context."""
-
-    @pytest.fixture
-    def config(self) -> VibeConfig:
-        """Create a test configuration."""
-        return VibeConfig()
-
-    def test_single_tool_title(self, config: VibeConfig):
-        """Test that single tool shows correct title without progress."""
-        # Test the title generation logic directly
-        tool_name = "bash"
-        total_tools = 1
-        current_index = 0
-
-        title_text = f"⚠ {tool_name} command"
-        if total_tools > 1:
-            title_text += f" ({current_index + 1}/{total_tools})"
-
-        assert title_text == "⚠ bash command"
-        assert "(1/1)" not in title_text
-
-    def test_multi_tool_title_progress(self):
-        """Test that multi-tool shows progress in title."""
-        # Test the title generation logic directly
-        tool_name = "bash"
-        total_tools = 3
-        current_index = 0
-
-        title_text = f"⚠ {tool_name} command"
-        if total_tools > 1:
-            title_text += f" ({current_index + 1}/{total_tools})"
-
-        assert title_text == "⚠ bash command (1/3)"
-
-        # Second tool
-        current_index = 1
-        title_text = f"⚠ read_file command"
-        if total_tools > 1:
-            title_text += f" ({current_index + 1}/{total_tools})"
-
-        assert title_text == "⚠ read_file command (2/3)"
-
-        # Third tool
-        current_index = 2
-        title_text = f"⚠ edit_file command"
-        if total_tools > 1:
-            title_text += f" ({current_index + 1}/{total_tools})"
-
-        assert title_text == "⚠ edit_file command (3/3)"
-
-    def test_single_tool_options_count(self):
-        """Test that single tool shows only 3 options."""
-        total_tools = 1
-        max_options = 5 if total_tools > 1 else 3
-        assert max_options == 3
-
-    def test_multi_tool_options_count(self):
-        """Test that multi-tool shows 5 options."""
-        total_tools = 3
-        max_options = 5 if total_tools > 1 else 3
-        assert max_options == 5
-
-    def test_always_approve_option_text(self):
-        """Test that 'always allow' option is available."""
-        tool_name = "bash"
-        option_text = f"Yes and always allow {tool_name} this session"
-        assert "always allow" in option_text.lower() or "Always" in option_text
-
-
 class TestKeyboardShortcuts:
     """Test keyboard shortcut functionality."""
 
     def test_approve_all_shortcut_key(self):
         """Test that key 4 is used for Approve All."""
-        # The key binding should be "4"
-        key = "4"
-        assert key == "4"
+        binding = next((b for b in ApprovalApp.BINDINGS if b.key == "4"), None)
+        assert binding is not None, "Binding for key '4' not found"
+        assert binding.action == "select_4"
+        assert binding.description == "Approve All"
 
     def test_reject_all_shortcut_key(self):
         """Test that key 5 is used for Reject All."""
-        # The key binding should be "5"
-        key = "5"
-        assert key == "5"
-
-
-class TestMultiToolFlow:
-    """Test multi-tool approval flow logic."""
-
-    def test_next_tool_calculation_first_tool(self):
-        """Test next_tool calculation for first tool."""
-        current_index = 0
-        total_tools = 3
-
-        # If not last tool, next_tool should be current_index + 1
-        if current_index < total_tools - 1:
-            next_tool = current_index + 1
-        else:
-            next_tool = None
-
-        assert next_tool == 1
-
-    def test_next_tool_calculation_last_tool(self):
-        """Test next_tool calculation for last tool."""
-        current_index = 2
-        total_tools = 3
-
-        # If not last tool, next_tool should be current_index + 1
-        if current_index < total_tools - 1:
-            next_tool = current_index + 1
-        else:
-            next_tool = None
-
-        assert next_tool is None
-
-    def test_batch_approve_all_remaining(self):
-        """Test that Approve All approves all remaining tools."""
-        current_index = 1
-        total_tools = 3
-        remaining = total_tools - current_index - 1
-
-        # Total decisions should be: 1 (current) + remaining (batch)
-        # But the batch actually adds the current + remaining, so we have:
-        # - Tool 0: approved (not part of batch)
-        # - Tools 1, 2: approved via batch
-        # Total: 3 approvals
-
-        # When batch_approve is True on tool 1, we add approvals for tools 1 and 2
-        # But tool 0 was already processed, so total is:
-        # 1 (tool 0) + 2 (tools 1 & 2 via batch) = 3
-        approvals = [True] + [True] * (
-            remaining + 1
-        )  # +1 because current tool is also batch approved
-
-        assert len(approvals) == 3
-        assert all(approvals)
-
-    def test_batch_reject_all_remaining(self):
-        """Test that Reject All rejects all remaining tools."""
-        current_index = 1
-        total_tools = 3
-        feedback = "User rejected all operations"
-        remaining = total_tools - current_index - 1
-
-        # Total decisions should be: 1 (current) + remaining + 1 (current batch)
-        decisions = [{"type": "approve"}] + [
-            {"type": "reject", "message": feedback}
-        ] * (remaining + 1)
-
-        assert len(decisions) == 3
-        assert decisions[0]["type"] == "approve"
-        assert decisions[1]["type"] == "reject"
-        assert decisions[2]["type"] == "reject"
-        assert all(d["message"] == feedback for d in decisions[1:])
+        binding = next((b for b in ApprovalApp.BINDINGS if b.key == "5"), None)
+        assert binding is not None, "Binding for key '5' not found"
+        assert binding.action == "select_5"
+        assert binding.description == "Reject All"

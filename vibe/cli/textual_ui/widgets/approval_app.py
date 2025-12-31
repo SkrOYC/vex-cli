@@ -65,6 +65,7 @@ class ApprovalApp(Container):
         self.action_requests = action_requests
         self.current_index = current_index
         self.total_tools = len(action_requests)
+        self.max_options = 5 if self.total_tools > 1 else 3
 
         # Get current tool info
         self.action_request = action_requests[current_index]
@@ -149,11 +150,12 @@ class ApprovalApp(Container):
             options.append(("Approve All (remaining tools)", "yes"))
             options.append(("Reject All (remaining tools)", "no"))
 
-        # Determine max options to display
-        max_options = 5 if self.total_tools > 1 else 3
-
         for idx, ((text, color_type), widget) in enumerate(
-            zip(options[:max_options], self.option_widgets[:max_options], strict=False)
+            zip(
+                options[: self.max_options],
+                self.option_widgets[: self.max_options],
+                strict=True,
+            )
         ):
             is_selected = idx == self.selected_option
 
@@ -181,13 +183,11 @@ class ApprovalApp(Container):
                     widget.add_class("approval-option-no")
 
     def action_move_up(self) -> None:
-        max_options = 5 if self.total_tools > 1 else 3
-        self.selected_option = (self.selected_option - 1) % max_options
+        self.selected_option = (self.selected_option - 1) % self.max_options
         self._update_options()
 
     def action_move_down(self) -> None:
-        max_options = 5 if self.total_tools > 1 else 3
-        self.selected_option = (self.selected_option + 1) % max_options
+        self.selected_option = (self.selected_option + 1) % self.max_options
         self._update_options()
 
     def action_select(self) -> None:
@@ -256,15 +256,6 @@ class ApprovalApp(Container):
 
         self._set_approval_result(result)
 
-        if always_approve:
-            self.post_message(
-                self.ApprovalGrantedAlwaysTool(
-                    action_request=self.action_request, save_permanently=False
-                )
-            )
-        else:
-            self.post_message(self.ApprovalGranted(action_request=self.action_request))
-
     def _handle_reject(self) -> None:
         """Handle rejection decision."""
         result = {
@@ -278,7 +269,6 @@ class ApprovalApp(Container):
             result["next_tool"] = self.current_index + 1
 
         self._set_approval_result(result)
-        self.post_message(self.ApprovalRejected(action_request=self.action_request))
 
     def _handle_approve_all(self) -> None:
         """Handle Approve All shortcut."""
@@ -289,7 +279,6 @@ class ApprovalApp(Container):
             "batch_approve": True,  # Signal to app
         }
         self._set_approval_result(result)
-        self.post_message(self.ApprovalGranted(action_request=self.action_request))
 
     def _handle_reject_all(self) -> None:
         """Handle Reject All shortcut."""
@@ -300,7 +289,6 @@ class ApprovalApp(Container):
             "batch_reject": True,  # Signal to app
         }
         self._set_approval_result(result)
-        self.post_message(self.ApprovalRejected(action_request=self.action_request))
 
     def _set_approval_result(self, result: dict[str, Any]) -> None:
         """Set the approval result on the app's pending approval future."""
