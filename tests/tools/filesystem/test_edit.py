@@ -34,11 +34,9 @@ from vibe.core.tools.filesystem.edit import (
     EditTool,
     EditToolConfig,
     EditToolState,
-    WarnedOperation,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
-
 
 # =============================================================================
 # Fixtures
