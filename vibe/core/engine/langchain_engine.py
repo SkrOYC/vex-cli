@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langchain.agents.middleware.human_in_the_loop import HITLResponse, Decision
+from langchain.agents.middleware.human_in_the_loop import Decision, HITLResponse
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
