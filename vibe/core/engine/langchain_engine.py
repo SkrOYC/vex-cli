@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
-from langchain.agents.middleware.human_in_the_loop import HITLResponse
+from langchain.agents.middleware.human_in_the_loop import HITLResponse, Decision
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
@@ -24,6 +24,9 @@ from vibe.core.engine.langchain_middleware import (
 from vibe.core.engine.state import VibeAgentState
 from vibe.core.engine.tools import VibeToolAdapter
 from vibe.core.engine.tui_events import TUIEventMapper
+
+# Default message used when a tool operation is rejected by the user
+_DEFAULT_REJECTION_MESSAGE = "Operation rejected by user"
 
 
 class VibeEngineStats:
@@ -234,7 +237,7 @@ class VibeLangChainEngine:
                 decisions=[
                     {
                         "type": "reject",
-                        "message": feedback or "Operation rejected by user",
+                        "message": feedback or _DEFAULT_REJECTION_MESSAGE,
                     }
                 ]
             )
@@ -266,18 +269,18 @@ class VibeLangChainEngine:
 
         config: RunnableConfig = {"configurable": {"thread_id": self._thread_id}}
 
-        # Build decisions list
-        decisions = []
-        for approved, feedback in zip(approvals, feedbacks, strict=True):
-            if approved:
-                decisions.append({"type": "approve"})
-            else:
-                decisions.append({
-                    "type": "reject",
-                    "message": feedback or "Operation rejected by user",
-                })
+        # Build decisions list using list comprehension
+        decisions = [
+            {"type": "approve"}
+            if approved
+            else {
+                "type": "reject",
+                "message": feedback or _DEFAULT_REJECTION_MESSAGE,
+            }
+            for approved, feedback in zip(approvals, feedbacks, strict=True)
+        ]
 
-        hitl_response = HITLResponse(decisions=decisions)
+        hitl_response = HITLResponse(decisions=cast("list[Decision]", decisions))
         await self._agent.ainvoke(Command(resume=hitl_response), config=config)
 
     async def handle_approve_all(self, tool_count: int) -> None:
