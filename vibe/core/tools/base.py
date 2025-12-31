@@ -29,7 +29,7 @@ class ToolPermission:
         if name in {cls.ALWAYS, cls.NEVER, cls.ASK}:
             return name
         raise ToolPermissionError(
-            f"Invalid tool permission: {name}. Must be one of {[cls.ALWAYS, cls.NEVER, cls.ASK]}"
+            f"Invalid tool permission: {name}. Must be one of {', '.join(map(repr, [cls.ALWAYS, cls.NEVER, cls.ASK]))}"
         )
 
 
