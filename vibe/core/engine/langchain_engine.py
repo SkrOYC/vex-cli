@@ -166,7 +166,7 @@ class VibeLangChainEngine:
             )
 
         # Logger middleware for observability
-        middleware.append(LoggerMiddleware(enabled=True))
+        middleware.append(LoggerMiddleware(enabled=self.config.agent_logging_enabled))
 
         return middleware
 

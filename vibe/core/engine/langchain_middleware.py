@@ -269,6 +269,36 @@ class LoggerMiddleware(AgentMiddleware):
             logger.info(f"[SESSION END] Agent session {session_id} completed")
         return None
 
+    def _log_model_request(self, request: ModelRequest) -> None:
+        """Logs model request details."""
+        model_name = getattr(request.model, "model_name", "unknown")
+        message_count = len(request.messages)
+        tools_count = len(request.tools) if request.tools else 0
+        logger.info(
+            f"[MODEL REQUEST] Model: {model_name}, Messages: {message_count}, Tools: {tools_count}"
+        )
+
+    def _log_model_response(self, response: ModelResponse) -> None:
+        """Logs model response details, including token usage."""
+        if response.result:
+            usage = getattr(response.result[0], "usage_metadata", None)
+            if usage:
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+                total_tokens = usage.get("total_tokens", 0)
+                logger.info(
+                    f"[MODEL RESPONSE] Usage: input={input_tokens}, output={output_tokens}, total={total_tokens}"
+                )
+            else:
+                logger.info("[MODEL RESPONSE] No usage metadata available")
+        else:
+            logger.info("[MODEL RESPONSE] No usage metadata available")
+
+        if response.structured_response:
+            logger.info(
+                f"[MODEL RESPONSE] Structured response: {response.structured_response}"
+            )
+
     def wrap_model_call(
         self,
         request: ModelRequest,
@@ -278,39 +308,11 @@ class LoggerMiddleware(AgentMiddleware):
         if not self.enabled:
             return handler(request)
 
+        self._log_model_request(request)
         try:
-            # Log the model request
-            model_name = getattr(request.model, "model_name", "unknown")
-            message_count = len(request.messages)
-            tools_count = len(request.tools) if request.tools else 0
-            logger.info(
-                f"[MODEL REQUEST] Model: {model_name}, Messages: {message_count}, Tools: {tools_count}"
-            )
-
-            # Execute the model call
             response = handler(request)
-
-            # Log the model response
-            if response.result:
-                usage = getattr(response.result[0], "usage_metadata", None)
-                if usage:
-                    input_tokens = usage.get("input_tokens", 0)
-                    output_tokens = usage.get("output_tokens", 0)
-                    total_tokens = usage.get("total_tokens", 0)
-                    logger.info(
-                        f"[MODEL RESPONSE] Usage: input={input_tokens}, output={output_tokens}, total={total_tokens}"
-                    )
-                else:
-                    logger.info("[MODEL RESPONSE] No usage metadata available")
-
-            # Log structured response if present
-            if response.structured_response:
-                logger.info(
-                    f"[MODEL RESPONSE] Structured response: {response.structured_response}"
-                )
-
+            self._log_model_response(response)
             return response
-
         except Exception as e:
             logger.error(f"[MODEL ERROR] Model call failed: {e}")
             raise
@@ -324,42 +326,24 @@ class LoggerMiddleware(AgentMiddleware):
         if not self.enabled:
             return await handler(request)
 
+        self._log_model_request(request)
         try:
-            # Log the model request
-            model_name = getattr(request.model, "model_name", "unknown")
-            message_count = len(request.messages)
-            tools_count = len(request.tools) if request.tools else 0
-            logger.info(
-                f"[MODEL REQUEST] Model: {model_name}, Messages: {message_count}, Tools: {tools_count}"
-            )
-
-            # Execute the model call
             response = await handler(request)
-
-            # Log the model response
-            if response.result:
-                usage = getattr(response.result[0], "usage_metadata", None)
-                if usage:
-                    input_tokens = usage.get("input_tokens", 0)
-                    output_tokens = usage.get("output_tokens", 0)
-                    total_tokens = usage.get("total_tokens", 0)
-                    logger.info(
-                        f"[MODEL RESPONSE] Usage: input={input_tokens}, output={output_tokens}, total={total_tokens}"
-                    )
-                else:
-                    logger.info("[MODEL RESPONSE] No usage metadata available")
-
-            # Log structured response if present
-            if response.structured_response:
-                logger.info(
-                    f"[MODEL RESPONSE] Structured response: {response.structured_response}"
-                )
-
+            self._log_model_response(response)
             return response
-
         except Exception as e:
             logger.error(f"[MODEL ERROR] Model call failed: {e}")
             raise
+
+    def _log_tool_request(self, tool_name: str, tool_args: dict) -> None:
+        """Logs tool call request details."""
+        logger.info(f"[TOOL CALL] {tool_name}({tool_args})")
+
+    def _log_tool_result(self, tool_name: str, result: Any) -> None:
+        """Logs tool call result, with truncation."""
+        content = result.content if isinstance(result, ToolMessage) else result
+        truncated_result = self._truncate_result(content)
+        logger.info(f"[TOOL RESULT] {tool_name}: {truncated_result}")
 
     def wrap_tool_call(
         self,
@@ -370,28 +354,14 @@ class LoggerMiddleware(AgentMiddleware):
         if not self.enabled:
             return handler(request)
 
+        tool_name = request.tool_call.get("name", "unknown")
+        self._log_tool_request(tool_name, request.tool_call.get("arguments", {}))
+
         try:
-            # Log the tool call
-            tool_name = request.tool_call.get("name", "unknown")
-            tool_args = request.tool_call.get("arguments", {})
-            logger.info(f"[TOOL CALL] {tool_name}({tool_args})")
-
-            # Execute the tool call
             result = handler(request)
-
-            # Log the tool result
-            if isinstance(result, ToolMessage):
-                truncated_result = self._truncate_result(result.content)
-                logger.info(f"[TOOL RESULT] {tool_name}: {truncated_result}")
-            else:
-                logger.info(
-                    f"[TOOL RESULT] {tool_name}: {self._truncate_result(result)}"
-                )
-
+            self._log_tool_result(tool_name, result)
             return result
-
         except Exception as e:
-            tool_name = request.tool_call.get("name", "unknown")
             logger.error(f"[TOOL ERROR] {tool_name} failed: {e}")
             raise
 
@@ -404,28 +374,14 @@ class LoggerMiddleware(AgentMiddleware):
         if not self.enabled:
             return await handler(request)
 
+        tool_name = request.tool_call.get("name", "unknown")
+        self._log_tool_request(tool_name, request.tool_call.get("arguments", {}))
+
         try:
-            # Log the tool call
-            tool_name = request.tool_call.get("name", "unknown")
-            tool_args = request.tool_call.get("arguments", {})
-            logger.info(f"[TOOL CALL] {tool_name}({tool_args})")
-
-            # Execute the tool call
             result = await handler(request)
-
-            # Log the tool result
-            if isinstance(result, ToolMessage):
-                truncated_result = self._truncate_result(result.content)
-                logger.info(f"[TOOL RESULT] {tool_name}: {truncated_result}")
-            else:
-                logger.info(
-                    f"[TOOL RESULT] {tool_name}: {self._truncate_result(result)}"
-                )
-
+            self._log_tool_result(tool_name, result)
             return result
-
         except Exception as e:
-            tool_name = request.tool_call.get("name", "unknown")
             logger.error(f"[TOOL ERROR] {tool_name} failed: {e}")
             raise
 

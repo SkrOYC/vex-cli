@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from typing import cast
+from unittest.mock import patch, MagicMock
 
 from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
@@ -284,9 +286,6 @@ class TestLoggerMiddleware:
 
     def test_before_agent_logs_session_start(self):
         """Test that before_agent logs session start."""
-        import logging
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=True)
 
         # Mock runtime with session_id
@@ -301,9 +300,6 @@ class TestLoggerMiddleware:
 
     def test_after_agent_logs_session_end(self):
         """Test that after_agent logs session end."""
-        import logging
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=True)
         runtime = type("Runtime", (), {"session_id": "test-session"})()
 
@@ -398,12 +394,11 @@ class TestLoggerMiddleware:
             middleware.wrap_model_call(request, mock_handler)
 
             # Check structured response logging
-            structured_call = [
-                call
+            found_log = any(
+                "Structured response" in call.args[0]
                 for call in mock_logger.info.call_args_list
-                if "Structured response" in str(call)
-            ][0]
-            assert "Structured response" in structured_call[0][0]
+            )
+            assert found_log, "Structured response log message not found."
 
     def test_wrap_model_call_no_usage_metadata(self):
         """Test wrap_model_call when no usage metadata."""
@@ -430,12 +425,11 @@ class TestLoggerMiddleware:
             middleware.wrap_model_call(request, mock_handler)
 
             # Check no usage message
-            no_usage_call = [
-                call
+            found_log = any(
+                "No usage metadata available" in call.args[0]
                 for call in mock_logger.info.call_args_list
-                if "No usage metadata" in str(call)
-            ][0]
-            assert "No usage metadata available" in no_usage_call[0][0]
+            )
+            assert found_log, "No usage metadata log message not found."
 
     def test_wrap_model_call_disabled(self):
         """Test wrap_model_call when disabled."""
