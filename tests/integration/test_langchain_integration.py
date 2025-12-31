@@ -130,6 +130,162 @@ class TestLangChainApprovalWorkflow:
         await engine.handle_approval(False, "rejected")
 
 
+class TestMultiToolApprovalWorkflow:
+    """Integration tests for multi-tool approval workflow."""
+
+    @pytest.fixture
+    def config(self, langchain_config: VibeConfig) -> VibeConfig:
+        """Create test configuration."""
+        return langchain_config
+
+    @pytest.fixture
+    def mock_agent(self):
+        """Create a mock agent with AsyncMock for ainvoke."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        agent = MagicMock()
+        agent.ainvoke = AsyncMock(return_value=None)
+        return agent
+
+    @pytest.fixture
+    def engine(self, config: VibeConfig, mock_agent) -> VibeLangChainEngine:
+        """Create engine with mocked agent."""
+        engine = VibeLangChainEngine(config)
+        engine._agent = mock_agent
+        return engine
+
+    @pytest.mark.asyncio
+    async def test_multi_tool_approval(self, engine: VibeLangChainEngine):
+        """Test approving/rejecting multiple tools individually."""
+        approvals = [True, False, True]
+        feedbacks: list[str | None] = [None, "Unsafe", None]
+        await engine.handle_multi_tool_approval(approvals, feedbacks)
+
+        # Verify ainvoke was called once
+        engine._agent.ainvoke.assert_called_once()  # type: ignore[union-attr]
+
+        # Get the Command object passed to ainvoke
+        call_args = engine._agent.ainvoke.call_args  # type: ignore[union-attr]
+        command = call_args[0][0]
+
+        # Verify it's a Command with HITLResponse
+        assert hasattr(command, "resume")
+        assert "decisions" in command.resume
+        assert len(command.resume["decisions"]) == 3
+
+        # Verify individual decisions
+        assert command.resume["decisions"][0] == {"type": "approve"}
+        assert command.resume["decisions"][1] == {"type": "reject", "message": "Unsafe"}
+        assert command.resume["decisions"][2] == {"type": "approve"}
+
+    @pytest.mark.asyncio
+    async def test_approve_all(self, engine: VibeLangChainEngine):
+        """Test approving all tools with batch shortcut."""
+        await engine.handle_approve_all(3)
+
+        # Verify ainvoke was called once
+        engine._agent.ainvoke.assert_called_once()  # type: ignore[union-attr]
+
+        # Get the Command object
+        call_args = engine._agent.ainvoke.call_args  # type: ignore[union-attr]
+        command = call_args[0][0]
+
+        # Verify all approved
+        assert "decisions" in command.resume
+        assert len(command.resume["decisions"]) == 3
+        assert all(d["type"] == "approve" for d in command.resume["decisions"])
+
+    @pytest.mark.asyncio
+    async def test_reject_all(self, engine: VibeLangChainEngine):
+        """Test rejecting all tools with batch shortcut."""
+        await engine.handle_reject_all(3, "Batch rejection")
+
+        # Verify ainvoke was called once
+        engine._agent.ainvoke.assert_called_once()  # type: ignore[union-attr]
+
+        # Get the Command object
+        call_args = engine._agent.ainvoke.call_args  # type: ignore[union-attr]
+        command = call_args[0][0]
+
+        # Verify all rejected with same feedback
+        assert "decisions" in command.resume
+        assert len(command.resume["decisions"]) == 3
+        assert all(d["type"] == "reject" for d in command.resume["decisions"])
+        assert all(
+            d["message"] == "Batch rejection" for d in command.resume["decisions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_reject_all_with_none_feedback(self, engine: VibeLangChainEngine):
+        """Test rejecting all tools with None feedback uses default message."""
+        await engine.handle_reject_all(2)
+
+        # Verify ainvoke was called once
+        engine._agent.ainvoke.assert_called_once()  # type: ignore[union-attr]
+
+        # Get the Command object
+        call_args = engine._agent.ainvoke.call_args  # type: ignore[union-attr]
+        command = call_args[0][0]
+
+        # Verify rejections use default message
+        assert "decisions" in command.resume
+        assert len(command.resume["decisions"]) == 2
+        assert all(d["type"] == "reject" for d in command.resume["decisions"])
+        assert all(
+            d["message"] == "Operation rejected by user"
+            for d in command.resume["decisions"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_length_mismatch(self, engine: VibeLangChainEngine):
+        """Test ValueError on length mismatch."""
+        with pytest.raises(ValueError, match="Length mismatch"):
+            await engine.handle_multi_tool_approval([True, False], [None])
+
+    @pytest.mark.asyncio
+    async def test_empty_approval_list(self, engine: VibeLangChainEngine):
+        """Test empty list of approvals creates empty HITLResponse."""
+        await engine.handle_multi_tool_approval([], [])
+
+        # Verify ainvoke was called once
+        engine._agent.ainvoke.assert_called_once()  # type: ignore[union-attr]
+
+        # Get the Command object
+        call_args = engine._agent.ainvoke.call_args  # type: ignore[union-attr]
+        command = call_args[0][0]
+
+        # Verify empty decisions
+        assert "decisions" in command.resume
+        assert len(command.resume["decisions"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_single_tool_degenerate_case(self, engine: VibeLangChainEngine):
+        """Test single tool works correctly."""
+        await engine.handle_multi_tool_approval([True], [None])
+
+        # Verify ainvoke was called once
+        engine._agent.ainvoke.assert_called_once()  # type: ignore[union-attr]
+
+        # Get the Command object
+        call_args = engine._agent.ainvoke.call_args  # type: ignore[union-attr]
+        command = call_args[0][0]
+
+        # Verify single decision
+        assert "decisions" in command.resume
+        assert len(command.resume["decisions"]) == 1
+        assert command.resume["decisions"][0] == {"type": "approve"}
+
+    @pytest.mark.asyncio
+    async def test_multi_tool_approval_no_agent(self, config: VibeConfig):
+        """Test multi-tool approval with no agent doesn't raise."""
+        engine = VibeLangChainEngine(config)
+
+        # Should not raise even with no agent
+        await engine.handle_multi_tool_approval([True, False], [None, "feedback"])
+        await engine.handle_approve_all(2)
+        await engine.handle_reject_all(2, "reason")
+
+
 class TestLangChainStateManagement:
     """Integration tests for conversation state management."""
 
