@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 # Feature flag for LangChain 1.2.0 engine
-USE_LANGCHAIN = os.getenv("VIBE_USE_LANGCHAIN", "false").lower() == "true"
+USE_LANGCHAIN = os.getenv("VIBE_USE_LANGCHAIN", "true").lower() == "true"
 
 if USE_LANGCHAIN:
     from vibe.core.engine.langchain_engine import VibeLangChainEngine as VibeEngine

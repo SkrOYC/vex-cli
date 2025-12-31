@@ -157,7 +157,7 @@ class TestFindFilesSimple:
         (temp_dir / "test.txt").write_text("hello")
         (temp_dir / "main.py").write_text("print('world')")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), patterns=["*.py"]))
+        result = await tool._arun(path=str(temp_dir), patterns=["*.py"])
 
         assert "Found 2 files" in result.output
         assert "test.py" in result.output
@@ -170,7 +170,7 @@ class TestFindFilesSimple:
         """Test find_files when no files match."""
         (temp_dir / "test.txt").write_text("hello")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), patterns=["*.py"]))
+        result = await tool._arun(path=str(temp_dir), patterns=["*.py"])
 
         assert "No files found" in result.output
 
@@ -182,9 +182,7 @@ class TestFindFilesSimple:
         (temp_dir / "test.js").write_text("console.log('hello')")
         (temp_dir / "test.txt").write_text("hello")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["*.py", "*.js"])
-        )
+        result = await tool._arun(path=str(temp_dir), patterns=["*.py", "*.js"])
 
         assert "Found 2 files" in result.output
         assert "test.py" in result.output
@@ -202,8 +200,8 @@ class TestFindFilesWithExclude:
         (temp_dir / "test_test.py").write_text("print('test')")
         (temp_dir / "main.py").write_text("print('world')")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["*.py"], exclude=["*_test.py"])
+        result = await tool._arun(
+            path=str(temp_dir), patterns=["*.py"], exclude=["*_test.py"]
         )
 
         assert "Found 2 files" in result.output
@@ -223,9 +221,7 @@ class TestFindFilesMaxResults:
         for i in range(10):
             (temp_dir / f"file_{i}.py").write_text(f"# file {i}")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["*.py"], max_results=5)
-        )
+        result = await tool._arun(path=str(temp_dir), patterns=["*.py"], max_results=5)
 
         assert "(limited to 5)" in result.output
         # Should contain 5 file references
@@ -243,7 +239,7 @@ class TestFindFilesHiddenFiles:
         (temp_dir / "test.py").write_text("print('hello')")
         (temp_dir / ".hidden.py").write_text("print('hidden')")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), patterns=["*.py"]))
+        result = await tool._arun(path=str(temp_dir), patterns=["*.py"])
 
         assert "Found 1 files" in result.output
         assert "test.py" in result.output
@@ -256,8 +252,8 @@ class TestFindFilesHiddenFiles:
         (temp_dir / "test.py").write_text("print('hello')")
         (temp_dir / ".hidden.py").write_text("print('hidden')")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["*.py"], include_hidden=True)
+        result = await tool._arun(
+            path=str(temp_dir), patterns=["*.py"], include_hidden=True
         )
 
         assert "Found 2 files" in result.output
@@ -278,7 +274,7 @@ class TestFindFilesRecursive:
         (subdir / "nested.py").write_text("print('nested')")
         (temp_dir / "root.py").write_text("print('root')")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), patterns=["*.py"]))
+        result = await tool._arun(path=str(temp_dir), patterns=["*.py"])
 
         assert "Found 2 files" in result.output
         assert "root.py" in result.output
@@ -294,8 +290,8 @@ class TestFindFilesRecursive:
         (subdir / "nested.py").write_text("print('nested')")
         (temp_dir / "root.py").write_text("print('root')")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["*.py"], recursive=False)
+        result = await tool._arun(
+            path=str(temp_dir), patterns=["*.py"], recursive=False
         )
 
         assert "Found 1 files" in result.output
@@ -322,7 +318,7 @@ class TestListNonRecursive:
         (temp_dir / "file2.txt").write_text("content2")
 
         # Use recursive=False to get simple list format with markers
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=False))
+        result = await tool._arun(path=str(temp_dir), recursive=False)
 
         assert "[DIR]" in result.output
         assert "[FILE]" in result.output
@@ -339,7 +335,7 @@ class TestListNonRecursive:
         (temp_dir / "b_file.txt").write_text("b content")
 
         # Use recursive=False for consistent ordering test
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=False))
+        result = await tool._arun(path=str(temp_dir), recursive=False)
 
         output = result.output
         dir_pos = output.find("a_dir/")
@@ -357,7 +353,7 @@ class TestListNonRecursive:
         (temp_dir / "test.py").write_text("line1\nline2\nline3")
 
         # Use recursive=False for consistent output
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=False))
+        result = await tool._arun(path=str(temp_dir), recursive=False)
 
         assert "test.py" in result.output
         assert "3 lines" in result.output
@@ -374,7 +370,7 @@ class TestListRecursive:
         (subdir / "nested.py").write_text("print('nested')")
         (temp_dir / "root.py").write_text("print('root')")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=True))
+        result = await tool._arun(path=str(temp_dir), recursive=True)
 
         assert "root.py" in result.output
         assert "subdir/" in result.output
@@ -389,7 +385,7 @@ class TestListRecursive:
         subdir.mkdir()
         (subdir / "file.py").write_text("content")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=True))
+        result = await tool._arun(path=str(temp_dir), recursive=True)
 
         output = result.output
         # Subdirectory should have more indentation than root
@@ -413,7 +409,7 @@ class TestHiddenFiles:
         (temp_dir / ".hidden").mkdir()
         (temp_dir / ".hidden.txt").write_text("hidden")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=False))
+        result = await tool._arun(path=str(temp_dir), recursive=False)
 
         assert "visible.txt" in result.output
         assert ".hidden" not in result.output
@@ -426,8 +422,8 @@ class TestHiddenFiles:
         (temp_dir / "visible.txt").write_text("visible")
         (temp_dir / ".hidden.txt").write_text("hidden")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), include_hidden=True, recursive=False)
+        result = await tool._arun(
+            path=str(temp_dir), include_hidden=True, recursive=False
         )
 
         assert "visible.txt" in result.output
@@ -450,7 +446,7 @@ class TestPathResolution:
         (subdir / "test.py").write_text("print('hello')")
 
         # Run from temp_dir as workdir with relative path to directory
-        result = await tool.run(ListFilesArgs(path="subdir", patterns=["*.py"]))
+        result = await tool._arun(path="subdir", patterns=["*.py"])
 
         assert "Found 1 files" in result.output
 
@@ -461,7 +457,7 @@ class TestPathResolution:
         subdir.mkdir()
         (subdir / "test.py").write_text("print('hello')")
 
-        result = await tool.run(ListFilesArgs(path=str(subdir), patterns=["*.py"]))
+        result = await tool._arun(path=str(subdir), patterns=["*.py"])
 
         assert "Found 1 files" in result.output
 
@@ -479,7 +475,7 @@ class TestErrorMessages:
     ) -> None:
         """Test directory not found error includes helpful suggestions."""
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(ListFilesArgs(path=str(temp_dir / "nonexistent")))
+            await tool._arun(path=str(temp_dir / "nonexistent"))
 
         assert exc_info.value.code == "DIRECTORY_NOT_FOUND"
         assert "not found" in str(exc_info.value)
@@ -493,7 +489,7 @@ class TestErrorMessages:
         file_path.write_text("content")
 
         with pytest.raises(FileSystemError) as exc_info:
-            await tool.run(ListFilesArgs(path=str(file_path)))
+            await tool._arun(path=str(file_path))
 
         assert exc_info.value.code == "PATH_NOT_DIRECTORY"
         assert "not a directory" in str(exc_info.value)
@@ -520,8 +516,8 @@ class TestOutputTruncation:
             ).write_text(f"# file {i}")
 
         # Use a high max_results to allow more files before truncation
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["*.py"], max_results=5000)
+        result = await tool._arun(
+            path=str(temp_dir), patterns=["*.py"], max_results=5000
         )
 
         # Output should be truncated at 80,000 chars
@@ -545,7 +541,7 @@ class TestPatternMatching:
         subdir.mkdir()
         (subdir / "nested.py").write_text("print('nested')")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), patterns=["**/*.py"]))
+        result = await tool._arun(path=str(temp_dir), patterns=["**/*.py"])
 
         assert "Found" in result.output
 
@@ -557,9 +553,7 @@ class TestPatternMatching:
         (temp_dir / "file2.py").write_text("print(2)")
         (temp_dir / "file10.py").write_text("print(10)")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["file?.py"])
-        )
+        result = await tool._arun(path=str(temp_dir), patterns=["file?.py"])
 
         assert "Found 2 files" in result.output
         assert "file1.py" in result.output
@@ -573,9 +567,7 @@ class TestPatternMatching:
         (temp_dir / "fileC.py").write_text("print('C')")
         (temp_dir / "fileD.py").write_text("print('D')")
 
-        result = await tool.run(
-            ListFilesArgs(path=str(temp_dir), patterns=["file[ABC].py"])
-        )
+        result = await tool._arun(path=str(temp_dir), patterns=["file[ABC].py"])
 
         assert "Found 3 files" in result.output
         assert "fileA.py" in result.output
@@ -594,7 +586,7 @@ class TestEdgeCases:
 
     async def test_empty_directory(self, tool: ListFilesTool, temp_dir: Path) -> None:
         """Test listing empty directory."""
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=False))
+        result = await tool._arun(path=str(temp_dir), recursive=False)
 
         # Should work without error
         assert result.output is not None
@@ -607,7 +599,7 @@ class TestEdgeCases:
         (temp_dir / "file2.txt").write_text("content2")
 
         # Use patterns=["*"] explicitly for find_files behavior
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), patterns=["*"]))
+        result = await tool._arun(path=str(temp_dir), patterns=["*"])
 
         assert "Found 2 files" in result.output
 
@@ -619,7 +611,7 @@ class TestEdgeCases:
         subdir.mkdir()
         (subdir / "nested.txt").write_text("nested")
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=False))
+        result = await tool._arun(path=str(temp_dir), recursive=False)
 
         # Hidden directory should be excluded
         assert ".hidden_dir" not in result.output
@@ -631,7 +623,7 @@ class TestEdgeCases:
         # Create a file larger than 1KB (2048 bytes)
         (temp_dir / "large.txt").write_text("x" * 2048)
 
-        result = await tool.run(ListFilesArgs(path=str(temp_dir), recursive=False))
+        result = await tool._arun(path=str(temp_dir), recursive=False)
 
         assert "large.txt" in result.output
         # Should show size in KB

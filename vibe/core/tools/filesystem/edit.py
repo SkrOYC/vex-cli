@@ -25,11 +25,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from vibe.core.tools.base import BaseTool
+from langchain_core.tools import BaseTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import (
     LENGTH_DIFF_RATIO_THRESHOLD,
@@ -107,9 +107,9 @@ class EditTool(BaseTool):
     description: str = "Replace entire file content with safety checks (use 'edit_file' for str_replace)"
 
     # Constants matching TypeScript implementation
-    _HASH_MULTIPLIER: int = 31
-    _BIT_MASK_32: int = 0x1_00_00_00_00  # 2^32
-    _BASE_36: int = 36
+    _HASH_MULTIPLIER: ClassVar[int] = 31
+    _BIT_MASK_32: ClassVar[int] = 0x1_00_00_00_00  # 2^32
+    _BASE_36: ClassVar[int] = 36
 
     def __init__(
         self,

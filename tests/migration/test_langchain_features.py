@@ -445,7 +445,7 @@ class TestToolAdapterCompatibility:
             assert isinstance(tool, BaseTool), f"Tool {tool} is not BaseTool"
             assert hasattr(tool, "name")
             assert hasattr(tool, "description")
-            assert hasattr(tool, "run")
+            assert hasattr(tool, "args_schema")
 
     def test_bash_tool_included(self):
         """Test that bash tool is available."""

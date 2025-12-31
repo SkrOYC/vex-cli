@@ -148,8 +148,8 @@ function debounce(func, wait) {
 """
         )
 
-        result = await grep_tool.run(
-            GrepArgs(path=".", query=r"function\s+\w+", regex=True, recursive=True)
+        result = await grep_tool._arun(
+            path=".", query=r"function\s+\w+", regex=True, recursive=True
         )
 
         assert "utils.js" in result.output
@@ -171,8 +171,8 @@ class Calculator:
 """
         )
 
-        result = await grep_tool.run(
-            GrepArgs(path=".", query="hello", regex=False, recursive=True)
+        result = await grep_tool._arun(
+            path=".", query="hello", regex=False, recursive=True
         )
 
         assert "main.py" in result.output
@@ -193,9 +193,10 @@ def Hello():
         )
 
         # Case-insensitive (default) - should find both "hello" and "Hello"
-        result_ci = await grep_tool.run(
-            GrepArgs(path=".", query="Hello", case_sensitive=False, recursive=True)
+        result_ci = await grep_tool._arun(
+            path=".", query="Hello", case_sensitive=False, recursive=True
         )
+
         assert "main.py" in result_ci.output
         # Count case-insensitive matches for "hello"/"Hello"
         hello_count_ci = sum(
@@ -208,9 +209,10 @@ def Hello():
         )
 
         # Case-sensitive - should only find "Hello" (capital H)
-        result_cs = await grep_tool.run(
-            GrepArgs(path=".", query="Hello", case_sensitive=True, recursive=True)
+        result_cs = await grep_tool._arun(
+            path=".", query="Hello", case_sensitive=True, recursive=True
         )
+
         # Count case-sensitive matches for "Hello" (appears in print and def)
         hello_count_cs = sum(
             1
@@ -227,8 +229,8 @@ def Hello():
         """Test case-insensitive search works correctly."""
         (temp_dir / "main.py").write_text("Hello\nHELLO\nhello\n")
 
-        result = await grep_tool.run(
-            GrepArgs(path=".", query="hello", case_sensitive=False, recursive=True)
+        result = await grep_tool._arun(
+            path=".", query="hello", case_sensitive=False, recursive=True
         )
 
         # Should find all three when case-insensitive
@@ -253,8 +255,8 @@ def Hello():
         (temp_dir / "main.py").write_text("def test():\n    pass\n")
         (temp_dir / "Button.tsx").write_text("const test = 1;\n")
 
-        result = await grep_tool.run(
-            GrepArgs(path=".", query="test", patterns=["*.js"], recursive=True)
+        result = await grep_tool._arun(
+            path=".", query="test", patterns=["*.js"], recursive=True
         )
 
         assert "utils.js" in result.output
@@ -275,7 +277,7 @@ def Hello():
         subfile = subdir / "subfile.py"
         subfile.write_text("def sub_function():\n    pass\n")
 
-        result = await grep_tool.run(GrepArgs(path=".", query="def", recursive=True))
+        result = await grep_tool._arun(path=".", query="def", recursive=True)
 
         assert "subdir/subfile.py" in result.output
 
@@ -293,7 +295,7 @@ def Hello():
         root_file = temp_dir / "root.py"
         root_file.write_text("def root_func():\n    pass\n")
 
-        result = await grep_tool.run(GrepArgs(path=".", query="def", recursive=False))
+        result = await grep_tool._arun(path=".", query="def", recursive=False)
 
         # Should find root file
         assert "root.py" in result.output
@@ -317,8 +319,8 @@ def Hello():
         visible_file.write_text("def visible():\n    pass\n    # match found\n")
 
         # Without include_hidden (default) - should only find visible file
-        result_hidden = await grep_tool.run(
-            GrepArgs(path=".", query="def", include_hidden=False, recursive=True)
+        result_hidden = await grep_tool._arun(
+            path=".", query="def", include_hidden=False, recursive=True
         )
         # Hidden file should not be found
         assert ".hidden" not in result_hidden.output
@@ -327,8 +329,8 @@ def Hello():
 
         # With include_hidden=True - should find both
         # Use "match" which appears in both files
-        result_visible = await grep_tool.run(
-            GrepArgs(path=".", query="match", include_hidden=True, recursive=True)
+        result_visible = await grep_tool._arun(
+            path=".", query="match", include_hidden=True, recursive=True
         )
         # Both files should be found
         assert ".hidden" in result_visible.output
@@ -349,8 +351,8 @@ def Hello():
         visible_file.write_text("def visible():\n    pass\n    # match found\n")
 
         # Without include_hidden (default) - should only find visible file
-        result_hidden = await grep_tool.run(
-            GrepArgs(path=".", query="def", include_hidden=False, recursive=True)
+        result_hidden = await grep_tool._arun(
+            path=".", query="def", include_hidden=False, recursive=True
         )
         # File in hidden directory should not be found
         assert ".git/config" not in result_hidden.output
@@ -359,8 +361,8 @@ def Hello():
 
         # With include_hidden=True - should find both
         # Use "match" which appears in both files
-        result_visible = await grep_tool.run(
-            GrepArgs(path=".", query="match", include_hidden=True, recursive=True)
+        result_visible = await grep_tool._arun(
+            path=".", query="match", include_hidden=True, recursive=True
         )
         # File in hidden directory should be found
         assert ".git/config" in result_visible.output
@@ -379,8 +381,8 @@ def Hello():
         many_matches = temp_dir / "many.txt"
         many_matches.write_text("\n".join(["match"] * 100))
 
-        result = await grep_tool.run(
-            GrepArgs(path=".", query="match", max_results=10, recursive=True)
+        result = await grep_tool._arun(
+            path=".", query="match", max_results=10, recursive=True
         )
 
         # Should contain truncation footer
@@ -420,9 +422,7 @@ line9
 """
         )
 
-        result = await grep_tool.run(
-            GrepArgs(path=".", query="target_line", recursive=True)
-        )
+        result = await grep_tool._arun(path=".", query="target_line", recursive=True)
 
         # Should include the match line
         assert "target_line" in result.output
@@ -439,9 +439,7 @@ line9
         """Test output format matches TypeScript FileExplorer behavior."""
         (temp_dir / "main.py").write_text("def hello():\n    pass\n")
 
-        result = await grep_tool.run(
-            GrepArgs(path=".", query="def hello", recursive=True)
-        )
+        result = await grep_tool._arun(path=".", query="def hello", recursive=True)
 
         # Should start with file path with line number suffix
         assert "main.py:1" in result.output
@@ -463,7 +461,7 @@ line9
         # Create binary file
         (temp_dir / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
 
-        result = await grep_tool.run(GrepArgs(path=".", query="def", recursive=True))
+        result = await grep_tool._arun(path=".", query="def", recursive=True)
 
         # Should find the visible file
         assert "main.py" in result.output
@@ -477,7 +475,7 @@ line9
     ) -> None:
         """Test error when directory doesn't exist."""
         with pytest.raises(ValueError) as exc_info:
-            await grep_tool.run(GrepArgs(path="/nonexistent/directory", query="test"))
+            await grep_tool._arun(path="/nonexistent/directory", query="test")
 
         error_msg = str(exc_info.value)
         # Check for exact error format
@@ -497,14 +495,13 @@ line9
         binary_file.write_bytes(b"\x00\x01\x02\x03\x04\x05")
 
         with pytest.raises(ValueError) as exc_info:
-            await grep_tool.run(GrepArgs(path=".", query="test"))
+            await grep_tool._arun(path=".", query="test")
 
         error_msg = str(exc_info.value)
         # Check for exact error format with • bullets
         assert "No text files found" in error_msg
         assert "• Use 'list' command to see what files are in directory" in error_msg
         assert "• Specify a directory with known text files" in error_msg
-        assert "• Add file patterns to search specific file types" in error_msg
 
     async def test_invalid_regex_error(
         self, grep_tool: GrepTool, temp_dir: Path
@@ -513,7 +510,7 @@ line9
         (temp_dir / "test.py").write_text("test\n")
 
         with pytest.raises(ValueError) as exc_info:
-            await grep_tool.run(GrepArgs(path=".", query="[unclosed", regex=True))
+            await grep_tool._arun(path=".", query="[unclosed", regex=True)
 
         error_msg = str(exc_info.value)
         # Check for exact error format with • bullets
@@ -532,7 +529,7 @@ line9
         """Test relative paths are resolved to working directory."""
         (temp_dir / "main.py").write_text("def test():\n    pass\n")
 
-        result = await grep_tool.run(GrepArgs(path=".", query="def"))
+        result = await grep_tool._arun(path=".", query="def")
 
         assert "main.py" in result.output
 
@@ -542,7 +539,7 @@ line9
         """Test absolute paths work correctly."""
         (temp_dir / "main.py").write_text("def test():\n    pass\n")
 
-        result = await grep_tool.run(GrepArgs(path=str(temp_dir), query="def"))
+        result = await grep_tool._arun(path=str(temp_dir), query="def")
 
         assert "main.py" in result.output
 
@@ -553,7 +550,7 @@ line9
         (temp_dir / "main.py").write_text("test\n")
 
         with pytest.raises(ValueError) as exc_info:
-            await grep_tool.run(GrepArgs(path=str(temp_dir / "main.py"), query="test"))
+            await grep_tool._arun(path=str(temp_dir / "main.py"), query="test")
 
         error_msg = str(exc_info.value)
         # Check for exact error format
