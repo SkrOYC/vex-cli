@@ -22,10 +22,11 @@ Example:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.base import BaseTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
 
@@ -59,48 +60,11 @@ class InsertLineResult(BaseModel):
 
 
 # =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class InsertLineToolConfig(BaseToolConfig):
-    """Configuration for InsertLineTool.
-
-    Extends BaseToolConfig to include the ViewTrackerService dependency.
-
-    Attributes:
-        view_tracker: Service for tracking file views during the session.
-    """
-
-    view_tracker: ViewTrackerService | None = None
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-class InsertLineToolState(BaseToolState):
-    """State for InsertLineTool.
-
-    Tracks edit history for each file to support undo functionality.
-
-    Attributes:
-        edit_history: Dictionary mapping file paths to lists of previous content versions.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    edit_history: dict[str, list[str]] = Field(default_factory=dict)
-
-
-# =============================================================================
 # InsertLineTool Implementation
 # =============================================================================
 
 
-class InsertLineTool(
-    BaseTool[
-        InsertLineArgs, InsertLineResult, InsertLineToolConfig, InsertLineToolState
-    ]
-):
+class InsertLineTool(BaseTool):
     """Tool for inserting content at specific line numbers in files.
 
     This tool provides precise line insertion operations with several features:
@@ -110,27 +74,51 @@ class InsertLineTool(
     - Edit history tracking for potential undo functionality
     - UTF-8 encoding for file operations
     - Integrates with ViewTrackerService for view tracking (optional)
-
-    Attributes:
-        name: Tool name identifier.
-        description: Description of tool functionality.
-        args_schema: Pydantic model for input validation.
-        config: Tool configuration including ViewTrackerService.
-        state: Tool state for tracking edit history.
     """
 
-    name = "insert_line"
-    description = "Insert content at a specific line in a file"
-    args_schema: type[InsertLineArgs] = InsertLineArgs
+    # Class attributes for compatibility (set via __init__ but accessible as class attrs)
+    name: str = "insert_line"
+    description: str = "Insert content at a specific line in a file"
 
-    async def run(self, args: InsertLineArgs) -> InsertLineResult:
+    def __init__(
+        self,
+        view_tracker: ViewTrackerService | None = None,
+        workdir: Path | None = None,
+    ) -> None:
+        """Initialize InsertLineTool.
+
+        Args:
+            view_tracker: Optional service for tracking file views.
+            workdir: Working directory for path resolution. Defaults to cwd if None.
+        """
+        super().__init__(
+            name="insert_line",
+            description="Insert content at a specific line in a file",
+            args_schema=InsertLineArgs,
+        )
+        self._view_tracker = view_tracker
+        self._workdir = workdir or Path.cwd()
+        self._edit_history: dict[str, list[str]] = {}
+
+    def _run(self, **kwargs: Any) -> str:
+        """Synchronous execution not supported."""
+        raise NotImplementedError("InsertLineTool only supports async execution")
+
+    async def _arun(
+        self,
+        path: str,
+        new_str: str,
+        insert_line: int,
+    ) -> InsertLineResult:
         """Execute the insert_line tool operation.
 
         Inserts the specified content at the given line number. The content is
         inserted before the existing line at that position.
 
         Args:
-            args: InsertLineArgs containing path, new_str, and insert_line.
+            path: File path (absolute or relative to working directory).
+            new_str: Content to insert at the specified line.
+            insert_line: Line number where content should be inserted (1-based).
 
         Returns:
             InsertLineResult with success or error message.
@@ -139,7 +127,7 @@ class InsertLineTool(
             FileSystemError: If path resolution, file operations, or validation fails.
         """
         # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        resolved_path = self._resolve_path(path)
 
         # Check if file exists
         if not resolved_path.exists():
@@ -162,11 +150,11 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
         # Determine new content based on file state
         if old_content == "":
             # Handle empty file case
-            if args.insert_line == 1:
-                new_content = args.new_str
+            if insert_line == 1:
+                new_content = new_str
             else:
                 raise FileSystemError(
-                    message=f"Invalid line number: {args.insert_line} is out of bounds for empty file '{resolved_path}'\n\nFor empty files, you can only insert at line 1. Use insertLine: 1 to add content to an empty file.",
+                    message=f"Invalid line number: {insert_line} is out of bounds for empty file '{resolved_path}'\n\nFor empty files, you can only insert at line 1. Use insertLine: 1 to add content to an empty file.",
                     code="LINE_OUT_OF_BOUNDS",
                     path=str(resolved_path),
                     suggestions=[
@@ -181,13 +169,13 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
             num_lines = len(lines)
 
             # Convert 1-based to 0-based index
-            zero_index = args.insert_line - 1
+            zero_index = insert_line - 1
 
             # Validate bounds: valid range is 0 to num_lines (inclusive)
             # This means insert_line can be from 1 to num_lines + 1
             if zero_index < 0 or zero_index > num_lines:
                 raise FileSystemError(
-                    message=f"Line number {args.insert_line} is out of bounds for '{resolved_path}' ({num_lines} lines)\n\nValid range: [1, {num_lines + 1}].\n• Use 1 to insert at the beginning\n• Use {num_lines + 1} to insert at the end\n• Use 'read_file' command first to see the file structure",
+                    message=f"Line number {insert_line} is out of bounds for '{resolved_path}' ({num_lines} lines)\n\nValid range: [1, {num_lines + 1}].\n• Use 1 to insert at the beginning\n• Use {num_lines + 1} to insert at the end\n• Use 'read_file' command first to see the file structure",
                     code="LINE_OUT_OF_BOUNDS",
                     path=str(resolved_path),
                     suggestions=[
@@ -203,9 +191,9 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
                 # This is an append operation on a file with a trailing newline
                 # Insert before the empty string that represents the trailing newline
                 # to avoid creating an extra blank line
-                lines.insert(num_lines - 1, args.new_str)
+                lines.insert(num_lines - 1, new_str)
             else:
-                lines.insert(zero_index, args.new_str)
+                lines.insert(zero_index, new_str)
 
             new_content = "\n".join(lines)
 
@@ -213,11 +201,11 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
         self._push_history(str(resolved_path), old_content)
         resolved_path.write_text(new_content, encoding="utf-8")
 
-        if self.config.view_tracker is not None:
-            self.config.view_tracker.record_view(str(resolved_path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(str(resolved_path))
 
         return InsertLineResult(
-            output=f"Content inserted into '{resolved_path}' at line {args.insert_line}."
+            output=f"Content inserted into '{resolved_path}' at line {insert_line}."
         )
 
     # =============================================================================
@@ -236,7 +224,7 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
+            return (self._workdir / path).resolve()
 
     # =============================================================================
     # Edit History Management
@@ -253,7 +241,7 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
             file_path: Absolute path to the file being modified.
             content: Current content of the file to save.
         """
-        history = self.state.edit_history.setdefault(file_path, [])
+        history = self._edit_history.setdefault(file_path, [])
         history.append(content)
 
     def _pop_history(self, file_path: str) -> str | None:
@@ -268,7 +256,7 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
         Returns:
             The previous content of the file, or None if no history exists.
         """
-        history = self.state.edit_history.get(file_path)
+        history = self._edit_history.get(file_path)
         if not history:
             return None
         return history.pop()
