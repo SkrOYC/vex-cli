@@ -31,8 +31,6 @@ class TestContextWarningMiddleware:
 
     def test_warning_when_above_threshold(self):
         """Test that warning is injected when above threshold."""
-        from langchain_core.messages import AIMessage
-
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
 
         # Create a message with usage metadata showing 800 tokens (above 500 threshold)
@@ -74,8 +72,6 @@ class TestContextWarningMiddleware:
 
     def test_uses_usage_metadata(self):
         """Test that usage_metadata is preferred over estimation."""
-        from langchain_core.messages import AIMessage
-
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
 
         # Create a message with usage metadata showing 900 tokens
@@ -110,8 +106,6 @@ class TestContextWarningMiddleware:
 
     def test_warning_message_format(self):
         """Test warning message is properly formatted."""
-        from langchain_core.messages import AIMessage
-
         middleware = ContextWarningMiddleware(threshold_percent=0.75, max_context=10000)
 
         ai_message = AIMessage(
@@ -137,8 +131,6 @@ class TestPriceLimitMiddleware:
 
     def test_no_error_when_below_limit(self):
         """Test that no error is raised when below price limit."""
-        from langchain_core.messages import AIMessage
-
         pricing = {"test-model": (0.0001, 0.0002)}  # $0.10 per 1k tokens
         middleware = PriceLimitMiddleware(
             max_price=1.0, model_name="test-model", pricing=pricing
@@ -161,8 +153,6 @@ class TestPriceLimitMiddleware:
 
     def test_error_when_above_limit(self):
         """Test that RuntimeError is raised when above price limit."""
-        from langchain_core.messages import AIMessage
-
         pricing = {"test-model": (0.001, 0.002)}  # $1.00 per 1k tokens
         middleware = PriceLimitMiddleware(
             max_price=1.0, model_name="test-model", pricing=pricing
@@ -184,8 +174,6 @@ class TestPriceLimitMiddleware:
 
     def test_accumulates_cost(self):
         """Test that cost accumulates across calls."""
-        from langchain_core.messages import AIMessage
-
         pricing = {"test-model": (0.00005, 0.00005)}  # $0.05 per 1k tokens
         middleware = PriceLimitMiddleware(
             max_price=0.15, model_name="test-model", pricing=pricing
@@ -233,8 +221,6 @@ class TestPriceLimitMiddleware:
 
     def test_uses_default_pricing_when_model_not_found(self):
         """Test that default pricing is used when model not in pricing dict."""
-        from langchain_core.messages import AIMessage
-
         pricing = {"other-model": (0.001, 0.002)}
         middleware = PriceLimitMiddleware(
             max_price=1.0, model_name="test-model", pricing=pricing
@@ -311,8 +297,6 @@ class TestLoggerMiddleware:
 
     def test_before_agent_disabled(self):
         """Test that logging is disabled when enabled=False."""
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=False)
         runtime = type("Runtime", (), {"session_id": "test-session"})()
 
@@ -323,10 +307,6 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_logs_request_and_response(self):
         """Test wrap_model_call logs request and response."""
-        from unittest.mock import patch
-
-        from langchain_core.messages import AIMessage
-
         middleware = LoggerMiddleware(enabled=True)
 
         # Mock model request
@@ -371,10 +351,6 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_with_structured_response(self):
         """Test wrap_model_call logs structured response."""
-        from unittest.mock import patch
-
-        from langchain_core.messages import AIMessage
-
         middleware = LoggerMiddleware(enabled=True)
 
         mock_model = MagicMock()
@@ -403,10 +379,6 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_no_usage_metadata(self):
         """Test wrap_model_call when no usage metadata."""
-        from unittest.mock import patch
-
-        from langchain_core.messages import AIMessage
-
         middleware = LoggerMiddleware(enabled=True)
 
         mock_model = MagicMock()
@@ -435,8 +407,6 @@ class TestLoggerMiddleware:
 
     def test_wrap_model_call_disabled(self):
         """Test wrap_model_call when disabled."""
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=False)
         request = MagicMock()
         response = MagicMock()
@@ -451,8 +421,6 @@ class TestLoggerMiddleware:
 
     def test_wrap_tool_call_logs_execution(self):
         """Test wrap_tool_call logs tool execution."""
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=True)
 
         request = MagicMock()
@@ -484,8 +452,6 @@ class TestLoggerMiddleware:
 
     def test_wrap_tool_call_truncates_large_result(self):
         """Test wrap_tool_call truncates large results."""
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=True)
 
         request = MagicMock()
@@ -512,8 +478,6 @@ class TestLoggerMiddleware:
 
     def test_wrap_tool_call_no_content_attribute(self):
         """Test wrap_tool_call handles results without content attribute."""
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=True)
 
         request = MagicMock()
@@ -533,8 +497,6 @@ class TestLoggerMiddleware:
 
     def test_model_call_error_handling(self):
         """Test model call error handling."""
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=True)
         request = MagicMock()
         request.model = MagicMock()
@@ -554,8 +516,6 @@ class TestLoggerMiddleware:
 
     def test_tool_call_error_handling(self):
         """Test tool call error handling."""
-        from unittest.mock import patch
-
         middleware = LoggerMiddleware(enabled=True)
         request = MagicMock()
         request.tool_call = {"name": "test_tool", "arguments": {}}
