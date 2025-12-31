@@ -44,32 +44,30 @@ class VibeToolAdapter:
         Returns:
             List of filesystem BaseTool instances (create, read, edit, edit_file, list, grep, insert_line).
         """
-        tools: list[BaseTool] = []
         workdir = config.effective_workdir
-
-        # Create all filesystem tools
-        tools.append(CreateTool(workdir=workdir))
-        tools.append(ReadFileTool(workdir=workdir))
-        tools.append(EditTool(workdir=workdir))
-        tools.append(EditFileTool(workdir=workdir))
-        tools.append(ListFilesTool(workdir=workdir))
-        tools.append(GrepTool(workdir=workdir))
-        tools.append(InsertLineTool(workdir=workdir))
-
-        return tools
+        tool_classes = [
+            CreateTool,
+            ReadFileTool,
+            EditTool,
+            EditFileTool,
+            ListFilesTool,
+            GrepTool,
+            InsertLineTool,
+        ]
+        return [tool_cls(workdir=workdir) for tool_cls in tool_classes]
 
     @staticmethod
     def _matches_tool_pattern(tool_name: str, pattern: str) -> bool:
         """Check if tool name matches the given pattern.
 
         Supports:
-        - Exact name match (e.g., "bash")
-        - Glob patterns (e.g., "bash*", "file_*")
         - Regex patterns with re: prefix (e.g., "re:^file_.*")
+        - Glob patterns (e.g., "bash*", "file_*")
+        - Exact name match (e.g., "bash")
 
         Args:
             tool_name: Name of the tool to check.
-            pattern: Pattern to match against (exact, glob, or regex with re: prefix).
+            pattern: Pattern to match against (regex with re: prefix, glob, or exact).
 
         Returns:
             True if tool name matches pattern, False otherwise.
@@ -85,12 +83,8 @@ class VibeToolAdapter:
             except re.error:
                 return False
 
-        # Glob pattern (contains * or ?)
-        if "*" in pattern or "?" in pattern:
-            return fnmatch.fnmatch(tool_name, pattern)
-
-        # Exact match
-        return tool_name == pattern
+        # Glob pattern or exact match (fnmatch handles both)
+        return fnmatch.fnmatch(tool_name, pattern)
 
     @staticmethod
     def _apply_tool_filtering(
