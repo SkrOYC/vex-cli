@@ -24,7 +24,6 @@ class TestTUIEventMapper:
     def config(self) -> VibeConfig:
         """Create a test configuration."""
         config = VibeConfig()
-        config.use_langchain = True
         return config
 
     @pytest.fixture
@@ -160,7 +159,6 @@ class TestVibeLangChainEngineWithMapper:
     def config(self) -> VibeConfig:
         """Create a test configuration."""
         config = VibeConfig()
-        config.use_langchain = True
         return config
 
     def test_engine_initialization(self, config: VibeConfig):
@@ -213,45 +211,3 @@ class TestEngineExports:
 
         # TUIEventMapper should be imported
         assert hasattr(langchain_engine, "TUIEventMapper")
-
-
-class TestDeprecationWarnings:
-    """Test that deprecated classes emit warnings."""
-
-    def test_event_translator_deprecation_warning(self):
-        """Test that EventTranslator emits deprecation warning."""
-        import warnings
-
-        from vibe.core.config import VibeConfig
-        from vibe.core.engine.adapters import EventTranslator
-
-        config = VibeConfig()
-        config.use_langchain = True
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            EventTranslator(config)
-
-            assert len(w) >= 1
-            assert any(
-                "EventTranslator is deprecated" in str(warning.message) for warning in w
-            )
-
-    def test_approval_bridge_deprecation_warning(self):
-        """Test that ApprovalBridge emits deprecation warning."""
-        import warnings
-
-        from vibe.core.config import VibeConfig
-        from vibe.core.engine.adapters import ApprovalBridge
-
-        config = VibeConfig()
-        config.use_langchain = True
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            ApprovalBridge(config)
-
-            assert len(w) >= 1
-            assert any(
-                "ApprovalBridge is deprecated" in str(warning.message) for warning in w
-            )

@@ -13,7 +13,6 @@ try:
     from vibe.core import config_path
     from vibe.core.config import Backend, ModelConfig, ProviderConfig, VibeConfig
     from vibe.core.engine import VibeEngine
-    from vibe.core.engine.adapters import EventTranslator
 
     _HEAVY_IMPORTS_AVAILABLE = True
 except ImportError as e:
@@ -23,7 +22,6 @@ except ImportError as e:
 if TYPE_CHECKING:
     from vibe.core.config import VibeConfig
     from vibe.core.engine import VibeEngine
-    from vibe.core.engine.adapters import EventTranslator
 
 
 def get_base_config() -> dict[str, Any]:
@@ -85,7 +83,6 @@ def deepagents_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
 
     return VibeConfig(
         active_model="test-model",  # Must match the alias
-        use_deepagents=True,
         models=[
             ModelConfig(
                 name="gpt-4o-mini", provider="openai-compatible", alias="test-model"
@@ -110,7 +107,6 @@ def langchain_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
 
     return VibeConfig(
         active_model="test-model",  # Must match the alias
-        use_langchain=True,
         models=[
             ModelConfig(
                 name="gpt-4o-mini", provider="openai-compatible", alias="test-model"
@@ -128,12 +124,6 @@ def langchain_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
 
 
 @pytest.fixture
-def vibe_engine(deepagents_config: VibeConfig) -> VibeEngine:
+def vibe_engine(langchain_config: VibeConfig) -> VibeEngine:
     """Create VibeEngine for testing."""
-    return VibeEngine(deepagents_config)
-
-
-@pytest.fixture
-def event_translator(deepagents_config: VibeConfig) -> EventTranslator:
-    """Create EventTranslator for testing."""
-    return EventTranslator(deepagents_config)
+    return VibeEngine(langchain_config)

@@ -81,27 +81,28 @@ Transform Mistral Vibe from a DeepAgents-dependent application to a direct LangC
 
 ## Migration Phases
 
-1. **Phase 1: Foundation** - Add LangChain 1.2.0, create engine abstraction
-2. **Phase 2: Agent Engine** - Replace `create_deep_agent()` with `create_agent()`
-3. **Phase 3: Middleware** - Build custom middleware stack
-4. **Phase 4: Tools** - Migrate tool adapter for native LangChain
-5. **Phase 5: State** - Implement proper state schema
-6. **Phase 6: Approval** - Use native HITL middleware
-7. **Phase 7: Events** - Native LangGraph streaming
-8. **Phase 8: TUI** - Connect TUI to new engine
-9. **Phase 9: Testing** - Comprehensive validation
+1. **Phase 1: Foundation** - Add LangChain 1.2.0, create engine abstraction ✅ Complete
+2. **Phase 2: Agent Engine** - Replace `create_deep_agent()` with `create_agent()` ✅ Complete
+3. **Phase 3: Middleware** - Build custom middleware stack ✅ Complete
+4. **Phase 4: Tools** - Migrate tool adapter for native LangChain ✅ Complete
+5. **Phase 5: DeepAgents Removal** - Remove legacy DeepAgents engine files ✅ Complete
+6. **Phase 6: Approval** - Use native HITL middleware ✅ Complete
+7. **Phase 7: Events** - Native LangGraph streaming ✅ Complete
+8. **Phase 8: Configuration** - Remove DeepAgents config flags ✅ Complete
+9. **Phase 9: Testing** - Comprehensive validation ✅ Complete
+10. **Phase 10: Cleanup** - Final verification and documentation ✅ Complete
 
 ## Success Criteria
 
-- [ ] All existing TUI features work unchanged
-- [ ] All existing tools function correctly
-- [ ] Configuration system preserved
-- [ ] Project detection works
-- [ ] New features (custom middleware, better streaming) accessible via TUI
-- [ ] Test suite passes
-- [ ] Performance meets or exceeds original
-- [ ] No DeepAgents imports remain in codebase
-- [ ] Adapter layers completely removed
+- [x] All existing TUI features work unchanged
+- [x] All existing tools function correctly
+- [x] Configuration system preserved
+- [x] Project detection works
+- [x] New features (custom middleware, better streaming) accessible via TUI
+- [x] Test suite passes
+- [x] Performance meets or exceeds original
+- [x] No DeepAgents imports remain in codebase
+- [x] Adapter layers completely removed
 
 ## Document Index
 

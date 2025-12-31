@@ -115,8 +115,8 @@ class ListFilesTool(BaseTool):
     async def _arun(
         self,
         path: str = ".",
-        patterns: list[str] = [],
-        exclude: list[str] = [],
+        patterns: list[str] = None,
+        exclude: list[str] = None,
         recursive: bool = True,
         max_results: int = 1000,
         include_hidden: bool = False,
@@ -143,6 +143,10 @@ class ListFilesTool(BaseTool):
             FileSystemError: If path resolution or file operations fail.
         """
         # Resolve path to absolute
+        if exclude is None:
+            exclude = []
+        if patterns is None:
+            patterns = []
         resolved_path = self._resolve_path(path)
 
         # Validate path exists
@@ -373,7 +377,6 @@ class ListFilesTool(BaseTool):
         Returns:
             Formatted directory tree.
         """
-
         if current_depth >= max_depth:
             return ""
 

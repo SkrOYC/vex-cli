@@ -154,7 +154,6 @@ class VibeApp(App):
             yield Static(id="loading-area-content")
             yield ModeIndicator(
                 auto_approve=self.auto_approve,
-                use_deepagents=self.config.use_deepagents,
             )
 
         yield Static(id="todo-area")
@@ -237,11 +236,7 @@ class VibeApp(App):
     async def on_approval_app_approval_granted(
         self, message: ApprovalApp.ApprovalGranted
     ) -> None:
-        if isinstance(self.agent, VibeEngine) and self._current_request_id:
-            # DeepAgents flow
-            await self.agent.handle_approval(True, self._current_request_id, None)
-            self._current_request_id = None
-        elif isinstance(self.agent, VibeLangChainEngine):
+        if isinstance(self.agent, VibeLangChainEngine):
             # Native LangChain 1.2.0 flow - use Command(resume=...)
             await self.agent.handle_approval(True)  # type: ignore[arg-type]
         elif self._pending_approval and not self._pending_approval.done():
@@ -257,11 +252,7 @@ class VibeApp(App):
             message.tool_name, save_permanently=message.save_permanently
         )
 
-        if isinstance(self.agent, VibeEngine) and self._current_request_id:
-            # DeepAgents flow
-            await self.agent.handle_approval(True, self._current_request_id, None)
-            self._current_request_id = None
-        elif isinstance(self.agent, VibeLangChainEngine):
+        if isinstance(self.agent, VibeLangChainEngine):
             # Native LangChain 1.2.0 flow - use Command(resume=...)
             await self.agent.handle_approval(True)  # type: ignore[arg-type]
         elif self._pending_approval and not self._pending_approval.done():
@@ -277,11 +268,7 @@ class VibeApp(App):
             get_user_cancellation_message(CancellationReason.OPERATION_CANCELLED)
         )
 
-        if isinstance(self.agent, VibeEngine) and self._current_request_id:
-            # DeepAgents flow
-            await self.agent.handle_approval(False, self._current_request_id, feedback)
-            self._current_request_id = None
-        elif isinstance(self.agent, VibeLangChainEngine):
+        if isinstance(self.agent, VibeLangChainEngine):
             # Native LangChain 1.2.0 flow
             await self.agent.handle_approval(False, feedback)  # type: ignore[arg-type]  # type: ignore[arg-type]
         elif self._pending_approval and not self._pending_approval.done():
@@ -456,33 +443,26 @@ class VibeApp(App):
 
         self._agent_initializing = True
         try:
-            if self.config.use_deepagents:
-                agent = VibeEngine(
-                    self.config,
-                    approval_callback=self._handle_approval_decision,
-                    initial_messages=self._loaded_messages,
-                )
-            else:
-                agent = Agent(
-                    self.config,
-                    auto_approve=self.auto_approve,
-                    enable_streaming=self.enable_streaming,
-                )
+            agent = Agent(
+                self.config,
+                auto_approve=self.auto_approve,
+                enable_streaming=self.enable_streaming,
+            )
 
-                if not self.auto_approve:
-                    agent.approval_callback = self._approval_callback
+            if not self.auto_approve:
+                agent.approval_callback = self._approval_callback
 
-                if self._loaded_messages:
-                    non_system_messages = [
-                        msg
-                        for msg in self._loaded_messages
-                        if not (msg.role == Role.system)
-                    ]
-                    agent.messages.extend(non_system_messages)
-                    logger.info(
-                        "Loaded %d messages from previous session",
-                        len(non_system_messages),
-                    )
+            if self._loaded_messages:
+                non_system_messages = [
+                    msg
+                    for msg in self._loaded_messages
+                    if not (msg.role == Role.system)
+                ]
+                agent.messages.extend(non_system_messages)
+                logger.info(
+                    "Loaded %d messages from previous session",
+                    len(non_system_messages),
+                )
 
             self.agent = agent
         except asyncio.CancelledError:
@@ -553,11 +533,11 @@ class VibeApp(App):
     def _get_engine_iterator(self, prompt: str) -> AsyncIterator[BaseEvent]:
         """Get the appropriate event iterator for the current engine.
 
-        Both VibeEngine (DeepAgents) and VibeLangChainEngine yield BaseEvent
-        types (VibeLangChainEngine maps native events internally via TUIEventMapper),
+        Both VibeLangChainEngine and legacy Agent yield BaseEvent types
+        (VibeLangChainEngine maps native events internally via TUIEventMapper),
         so we can return them directly.
         """
-        if isinstance(self.agent, (VibeEngine, VibeLangChainEngine)):
+        if isinstance(self.agent, VibeLangChainEngine):
             return self.agent.run(prompt)
         elif isinstance(self.agent, Agent):
             return self.agent.act(prompt)
@@ -673,7 +653,9 @@ class VibeApp(App):
             return
 
         stats = self.agent.stats
-        engine_name = "VibeEngine" if isinstance(self.agent, VibeEngine) else "Agent"
+        engine_name = (
+            "VibeEngine" if isinstance(self.agent, VibeLangChainEngine) else "Agent"
+        )
         status_text = f"""## Agent Statistics ({engine_name})
 
 - **Steps**: {stats.steps:,}
@@ -697,8 +679,7 @@ class VibeApp(App):
             new_config = VibeConfig.load()
 
             if self.agent:
-                if isinstance(self.agent, VibeEngine):
-                    # VibeEngine doesn't have reload_with_initial_messages, reset instead
+                if isinstance(self.agent, VibeLangChainEngine):
                     self.agent.reset()
                 else:
                     await self.agent.reload_with_initial_messages(config=new_config)
@@ -820,9 +801,9 @@ class VibeApp(App):
             return
 
         # Check if there's enough history to compact
-        # For VibeEngine, we check via stats, for legacy agent via messages
+        # For VibeLangChainEngine, we check via stats, for legacy agent via messages
         has_history = False
-        if isinstance(self.agent, VibeEngine):
+        if isinstance(self.agent, VibeLangChainEngine):
             has_history = self.agent.stats.steps > 0
         else:
             has_history = len(self.agent.messages) > 1
@@ -1092,7 +1073,7 @@ class VibeApp(App):
         if self._chat_input_container:
             self._chat_input_container.set_show_warning(self.auto_approve)
 
-        if self.agent and not isinstance(self.agent, VibeEngine):
+        if self.agent and not isinstance(self.agent, VibeLangChainEngine):
             self.agent.auto_approve = self.auto_approve
 
             if self.auto_approve:
