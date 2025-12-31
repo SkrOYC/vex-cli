@@ -28,8 +28,6 @@ from vibe.core.tools.filesystem.edit_file import (
     EditFileArgs,
     EditFileResult,
     EditFileTool,
-    EditFileToolConfig,
-    EditFileToolState,
 )
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
@@ -53,37 +51,15 @@ def view_tracker() -> ViewTrackerService:
 
 
 @pytest.fixture
-def tool_config(view_tracker: ViewTrackerService, temp_dir: Path) -> EditFileToolConfig:
-    """Create an EditFileToolConfig with ViewTrackerService."""
-    return EditFileToolConfig(view_tracker=view_tracker, workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_config_no_view_tracker(temp_dir: Path) -> EditFileToolConfig:
-    """Create an EditFileToolConfig without ViewTrackerService."""
-    return EditFileToolConfig(workdir=temp_dir)
-
-
-@pytest.fixture
-def tool_state() -> EditFileToolState:
-    """Create a fresh EditFileToolState for each test."""
-    return EditFileToolState()
-
-
-@pytest.fixture
-def tool(
-    tool_config: EditFileToolConfig, tool_state: EditFileToolState
-) -> EditFileTool:
+def tool(view_tracker: ViewTrackerService, temp_dir: Path) -> EditFileTool:
     """Create an EditFileTool instance for testing."""
-    return EditFileTool(config=tool_config, state=tool_state)
+    return EditFileTool(view_tracker=view_tracker, workdir=temp_dir)
 
 
 @pytest.fixture
-def tool_no_view_tracker(
-    tool_config_no_view_tracker: EditFileToolConfig, tool_state: EditFileToolState
-) -> EditFileTool:
+def tool_no_view_tracker(temp_dir: Path) -> EditFileTool:
     """Create an EditFileTool instance without ViewTrackerService for testing."""
-    return EditFileTool(config=tool_config_no_view_tracker, state=tool_state)
+    return EditFileTool(workdir=temp_dir)
 
 
 # =============================================================================

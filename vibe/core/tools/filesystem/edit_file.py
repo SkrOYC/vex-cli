@@ -13,20 +13,21 @@ Features:
 
 Example:
     ```python
-    from vibe.core.tools.filesystem.edit_file import EditFileTool, EditFileArgs
+    from vibe.core.tools.filesystem.edit_file import EditFileTool
 
-    tool = EditFileTool(config=tool_config, state=tool_state)
-    result = await tool.run(EditFileArgs(path="test.py", old_str="hello", new_str="hi"))
+    tool = EditFileTool(workdir=Path("/project"))
+    result = await tool.arun(path="test.py", old_str="hello", new_str="hi")
     ```
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
-from vibe.core.tools.base import BaseTool, BaseToolConfig, BaseToolState
+from vibe.core.tools.base import BaseTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import FileSystemError
 
@@ -63,48 +64,11 @@ class EditFileResult(BaseModel):
 
 
 # =============================================================================
-# Tool Configuration and State
-# =============================================================================
-
-
-class EditFileToolConfig(BaseToolConfig):
-    """Configuration for EditFileTool.
-
-    Extends BaseToolConfig to include the ViewTrackerService dependency.
-
-    Attributes:
-        view_tracker: Service for tracking file views during the session.
-    """
-
-    view_tracker: ViewTrackerService | None = None
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-class EditFileToolState(BaseToolState):
-    """State for EditFileTool.
-
-    Tracks edit history for each file to support undo functionality.
-
-    Attributes:
-        edit_history: Dictionary mapping file paths to lists of previous content versions.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid", validate_default=True, arbitrary_types_allowed=True
-    )
-
-    edit_history: dict[str, list[str]] = Field(default_factory=dict)
-
-
-# =============================================================================
 # EditFileTool Implementation
 # =============================================================================
 
 
-class EditFileTool(
-    BaseTool[EditFileArgs, EditFileResult, EditFileToolConfig, EditFileToolState]
-):
+class EditFileTool(BaseTool):
     """Tool for performing precise string replacements in files.
 
     This tool provides safe string replacement operations with multiple safety features:
@@ -114,27 +78,43 @@ class EditFileTool(
     - Tracks edit history for potential undo functionality
     - Supports UTF-8 encoding for file operations
     - Integrates with ViewTrackerService for view tracking (optional)
-
-    Attributes:
-        name: Tool name identifier.
-        description: Description of tool functionality.
-        args_schema: Pydantic model for input validation.
-        config: Tool configuration including ViewTrackerService.
-        state: Tool state for tracking edit history.
     """
 
-    name = "edit_file"
-    description = "Replace a specific string in a file with exact matching"
-    args_schema: type[EditFileArgs] = EditFileArgs
+    def __init__(
+        self,
+        view_tracker: ViewTrackerService | None = None,
+        workdir: Path | None = None,
+    ) -> None:
+        """Initialize EditFileTool.
 
-    async def run(self, args: EditFileArgs) -> EditFileResult:
+        Args:
+            view_tracker: Optional service for tracking file views.
+            workdir: Working directory for path resolution. Defaults to cwd if None.
+        """
+        super().__init__(
+            name="edit_file",
+            description="Replace a specific string in a file with exact matching",
+            args_schema=EditFileArgs,
+        )
+        self._view_tracker = view_tracker
+        self._workdir = workdir or Path.cwd()
+        self._edit_history: dict[str, list[str]] = {}
+
+    async def _arun(
+        self,
+        path: str,
+        old_str: str,
+        new_str: str,
+    ) -> EditFileResult:
         """Execute the edit_file tool operation.
 
         Performs precise string replacement in the specified file. The old string
         must appear exactly once in the file for the replacement to succeed.
 
         Args:
-            args: EditFileArgs containing path, old_str, and new_str.
+            path: File path (absolute or relative to working directory).
+            old_str: Exact string to replace in the file.
+            new_str: Replacement string to insert.
 
         Returns:
             EditFileResult with success or error message.
@@ -143,10 +123,10 @@ class EditFileTool(
             FileSystemError: If path resolution, file operations, or validation fails.
         """
         # Resolve path to absolute
-        resolved_path = self._resolve_path(args.path)
+        resolved_path = self._resolve_path(path)
 
         # Validate that old_str is not empty (split with empty separator is invalid)
-        if not args.old_str:
+        if not old_str:
             raise FileSystemError(
                 message="The 'old_str' argument cannot be an empty string.",
                 code="INVALID_ARGUMENT",
@@ -173,14 +153,14 @@ The specified file doesn't exist. Use 'create' command to create a new file, or 
         old_content = resolved_path.read_text(encoding="utf-8")
 
         # Split content by old_str to check for exact match
-        parts = old_content.split(args.old_str)
+        parts = old_content.split(old_str)
 
         # Validate that old_str appears exactly once
         if len(parts) == 1:
             raise FileSystemError(
                 message=f"""Text not found in '{resolved_path}'
 
-The specified text '{args.old_str}' was not found in the file. Check for:
+The specified text '{old_str}' was not found in the file. Check for:
 • Typos or whitespace differences
 • Extra character escaping (content must exactly match the file)
 • Use 'read_file' command to copy the precise text including all whitespace and formatting""",
@@ -195,7 +175,7 @@ The specified text '{args.old_str}' was not found in the file. Check for:
 
         if len(parts) > _EXACT_MATCH_PARTS_COUNT:
             raise FileSystemError(
-                message=f"""Multiple matches found: '{args.old_str}' appears {len(parts) - 1} times in '{resolved_path}'
+                message=f"""Multiple matches found: '{old_str}' appears {len(parts) - 1} times in '{resolved_path}'
 
 str_replace requires exactly one occurrence. To fix:
 • Add more surrounding context to old_str to make it unique
@@ -214,14 +194,14 @@ str_replace requires exactly one occurrence. To fix:
         self._push_history(str(resolved_path), old_content)
 
         # Perform the replacement using join
-        new_content = args.new_str.join(parts)
+        new_content = new_str.join(parts)
 
         # Write the new content back to the file
         resolved_path.write_text(new_content, encoding="utf-8")
 
         # Record view after successful edit if view_tracker is configured
-        if self.config.view_tracker is not None:
-            self.config.view_tracker.record_view(str(resolved_path))
+        if self._view_tracker is not None:
+            self._view_tracker.record_view(str(resolved_path))
 
         return EditFileResult(output=f"File '{resolved_path}' modified successfully.")
 
@@ -241,7 +221,7 @@ str_replace requires exactly one occurrence. To fix:
         if Path(path).is_absolute():
             return Path(path).resolve()
         else:
-            return (self.config.effective_workdir / path).resolve()
+            return (self._workdir / path).resolve()
 
     # =============================================================================
     # Edit History Management
@@ -258,7 +238,7 @@ str_replace requires exactly one occurrence. To fix:
             file_path: Absolute path to the file being modified.
             content: Current content of the file to save.
         """
-        history = self.state.edit_history.setdefault(file_path, [])
+        history = self._edit_history.setdefault(file_path, [])
         history.append(content)
 
     def _pop_history(self, file_path: str) -> str | None:
@@ -273,7 +253,11 @@ str_replace requires exactly one occurrence. To fix:
         Returns:
             The previous content of the file, or None if no history exists.
         """
-        history = self.state.edit_history.get(file_path)
+        history = self._edit_history.get(file_path)
         if not history:
             return None
         return history.pop()
+
+    def _run(self, **kwargs: Any) -> str:
+        """Synchronous execution not supported."""
+        raise NotImplementedError("EditFileTool only supports async execution")
