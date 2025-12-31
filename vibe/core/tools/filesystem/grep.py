@@ -31,7 +31,6 @@ from typing import Any, ClassVar, TypedDict
 from pydantic import BaseModel, ConfigDict, Field
 
 from vibe.core.tools.base import BaseTool
-from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import (
     DEFAULT_CONTEXT_AFTER,
     DEFAULT_CONTEXT_BEFORE,
@@ -195,13 +194,11 @@ class GrepTool(BaseTool):
 
     def __init__(
         self,
-        view_tracker: "ViewTrackerService | None" = None,
         workdir: Path | None = None,
     ) -> None:
         """Initialize GrepTool.
 
         Args:
-            view_tracker: Optional service for tracking file views.
             workdir: Working directory for path resolution. Defaults to cwd if None.
         """
         super().__init__(
@@ -209,7 +206,6 @@ class GrepTool(BaseTool):
             description="Search files with regex support and context lines. Use regex=true for regex patterns, or literal search by default.",
             args_schema=GrepArgs,
         )
-        self._view_tracker = view_tracker
         self._workdir = workdir or Path.cwd()
 
     def _run(self, **kwargs: Any) -> str:

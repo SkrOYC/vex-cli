@@ -30,7 +30,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from vibe.core.tools.base import BaseTool
-from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import OUTPUT_LIMIT, FileSystemError
 
 # =============================================================================
@@ -95,13 +94,11 @@ class ListFilesTool(BaseTool):
 
     def __init__(
         self,
-        view_tracker: ViewTrackerService | None = None,
         workdir: Path | None = None,
     ) -> None:
         """Initialize ListFilesTool.
 
         Args:
-            view_tracker: Optional service for tracking file views.
             workdir: Working directory for path resolution. Defaults to cwd if None.
         """
         super().__init__(
@@ -109,7 +106,6 @@ class ListFilesTool(BaseTool):
             description="List files and directories with pattern matching and metadata. Use patterns for find_files mode, or list directory contents.",
             args_schema=ListFilesArgs,
         )
-        self._view_tracker = view_tracker
         self._workdir = workdir or Path.cwd()
 
     def _run(self, **kwargs: Any) -> str:
