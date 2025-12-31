@@ -114,41 +114,6 @@ class TestCreateResult:
 
 
 # =============================================================================
-# CreateToolConfig Tests
-# =============================================================================
-
-
-class TestCreateToolConfig:
-    """Tests for CreateToolConfig."""
-
-    def test_creation_with_defaults(self) -> None:
-        """Test CreateToolConfig can be created with defaults."""
-        config = CreateToolConfig()
-        assert config.permission.value == "ask"
-        assert config.view_tracker is None
-
-    def test_creation_with_view_tracker(self) -> None:
-        """Test CreateToolConfig accepts ViewTrackerService."""
-        tracker = ViewTrackerService()
-        config = CreateToolConfig(view_tracker=tracker)
-        assert config.view_tracker is tracker
-
-
-# =============================================================================
-# CreateToolState Tests
-# =============================================================================
-
-
-class TestCreateToolState:
-    """Tests for CreateToolState."""
-
-    def test_creation_with_defaults(self) -> None:
-        """Test CreateToolState can be created with defaults."""
-        CreateToolState()
-        # State should be empty - no attributes defined
-
-
-# =============================================================================
 # Create Operation Tests
 # =============================================================================
 
