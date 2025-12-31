@@ -1,30 +1,152 @@
-"""Tool adapters for DeepAgents integration."""
+"""Tool adapters for LangChain 1.2.0 integration.
+
+This module provides tools adapted for use with LangChain-based agent engines.
+It includes bash execution, filesystem operations (create, read, edit, list, grep),
+MCP server tools, and custom tools from configured paths.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+import fnmatch
 from pathlib import Path
+import re
 from typing import Any, Never
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from vibe.core.config import VibeConfig
+from vibe.core.tools.filesystem.create import CreateTool
+from vibe.core.tools.filesystem.edit import EditTool
+from vibe.core.tools.filesystem.edit_file import EditFileTool
+from vibe.core.tools.filesystem.grep import GrepTool
+from vibe.core.tools.filesystem.insert_line import InsertLineTool
+from vibe.core.tools.filesystem.list_files import ListFilesTool
+from vibe.core.tools.filesystem.read_file import ReadFileTool
 
 
 class VibeToolAdapter:
-    """Adapts Vibe tools for DeepAgents consumption."""
+    """Adapts Vibe tools for LangChain consumption.
+
+    This class provides tools adapted for use with LangChain-based agent engines.
+    All tools can be filtered using the enabled_tools and disabled_tools configuration
+    options to control which tools are available to the agent.
+    """
+
+    @staticmethod
+    def _get_filesystem_tools(config: VibeConfig) -> list[BaseTool]:
+        """Get filesystem tools for file operations.
+
+        Args:
+            config: VibeConfig containing working directory.
+
+        Returns:
+            List of filesystem BaseTool instances (create, read, edit, edit_file, list, grep, insert_line).
+        """
+        workdir = config.effective_workdir
+        tool_classes = [
+            CreateTool,
+            ReadFileTool,
+            EditTool,
+            EditFileTool,
+            ListFilesTool,
+            GrepTool,
+            InsertLineTool,
+        ]
+        return [tool_cls(workdir=workdir) for tool_cls in tool_classes]
+
+    @staticmethod
+    def _matches_tool_pattern(tool_name: str, pattern: str) -> bool:
+        """Check if tool name matches the given pattern.
+
+        Supports:
+        - Regex patterns with re: prefix (e.g., "re:^file_.*")
+        - Glob patterns (e.g., "bash*", "file_*")
+        - Exact name match (e.g., "bash")
+
+        Args:
+            tool_name: Name of the tool to check.
+            pattern: Pattern to match against (regex with re: prefix, glob, or exact).
+
+        Returns:
+            True if tool name matches pattern, False otherwise.
+        """
+        if not pattern:
+            return False
+
+        # Regex pattern with re: prefix
+        if pattern.startswith("re:"):
+            regex_pattern = pattern[3:]
+            try:
+                return bool(re.match(regex_pattern, tool_name))
+            except re.error:
+                return False
+
+        # Glob pattern or exact match (fnmatch handles both)
+        return fnmatch.fnmatch(tool_name, pattern)
+
+    @staticmethod
+    def _apply_tool_filtering(
+        tools: list[BaseTool], config: VibeConfig
+    ) -> list[BaseTool]:
+        """Apply enabled_tools and disabled_tools filtering to tool list.
+
+        Behavior:
+        - If enabled_tools is set, only include tools matching those patterns (whitelist)
+        - If disabled_tools is set, exclude tools matching those patterns (blacklist)
+        - If both are set, disabled_tools takes precedence (blacklist overrides whitelist)
+        - If neither is set, all tools are included
+
+        Args:
+            tools: List of tools to filter.
+            config: VibeConfig containing enabled_tools and disabled_tools lists.
+
+        Returns:
+            Filtered list of tools based on config.
+        """
+        # If whitelist is set, filter to only matching tools
+        if config.enabled_tools:
+            tools = [
+                tool
+                for tool in tools
+                if any(
+                    VibeToolAdapter._matches_tool_pattern(tool.name, pattern)
+                    for pattern in config.enabled_tools
+                )
+            ]
+
+        # Apply blacklist (overrides whitelist if both are set)
+        if config.disabled_tools:
+            tools = [
+                tool
+                for tool in tools
+                if not any(
+                    VibeToolAdapter._matches_tool_pattern(tool.name, pattern)
+                    for pattern in config.disabled_tools
+                )
+            ]
+
+        return tools
 
     @staticmethod
     def get_all_tools(config: VibeConfig) -> Sequence[BaseTool]:
-        """Get all tools configured for the agent."""
+        """Get all tools configured for the agent.
+
+        Args:
+            config: VibeConfig containing tool configuration and filtering options.
+
+        Returns:
+            Sequence of BaseTool instances available to the agent.
+            Tools are filtered based on enabled_tools and disabled_tools config.
+        """
         tools: list[BaseTool] = []
 
         # Add custom bash tool
         tools.append(VibeToolAdapter._create_bash_tool(config))
 
-        # DeepAgents provides filesystem and planning (TodoList) tools by default,
-        # so we don't need to create these middleware instances here
+        # Add filesystem tools (create, read, edit, list, grep)
+        tools.extend(VibeToolAdapter._get_filesystem_tools(config))
 
         # Add MCP tools using official LangChain MCP adapters
         if config.mcp_servers:
@@ -46,7 +168,8 @@ class VibeToolAdapter:
             custom_tools = VibeToolAdapter._load_custom_tools(tool_path)
             tools.extend(custom_tools)
 
-        return tools
+        # Apply tool filtering based on config
+        return VibeToolAdapter._apply_tool_filtering(tools, config)
 
     @staticmethod
     def _create_bash_tool(config: VibeConfig) -> StructuredTool:
