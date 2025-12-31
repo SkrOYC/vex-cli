@@ -8,32 +8,37 @@ nix develop .#fhs --command uv sync                    # Install dependencies
 nix develop .#fhs --command uv sync --all-extras       # Install all extras
 nix develop .#fhs --command uv add <package>           # Add dependency
 nix develop .#fhs --command uv remove <package>        # Remove dependency
-nix develop .#fhs --command uv run <command>           # Run any tool
+```
+
+## Running Commands
+```bash
+# Use python directly (recommended) - avoids .venv conflicts
+nix develop .#fhs --command python -m pytest                          # All tests
+nix develop .#fhs --command python -m pytest --ignore tests/snapshots  # Exclude snapshots
+nix develop .#fhs --command python -m pytest tests/snapshots          # Snapshots only
+nix develop .#fhs --command python -m pytest tests/performance/test_benchmarks.py  # Benchmarks
+nix develop .#fhs --command python -m pytest <file>::<test>           # Single test
+nix develop .#fhs --command python -m pytest -v -x -n 0               # Verbose, stop on fail, no parallel
+
+# Alternative: Use uv run (may have .venv conflicts in some environments)
+nix develop .#fhs --command uv run pytest                          # All tests
+nix develop .#fhs --command uv run python -m vibe --prompt "test"  # Run vibe CLI
 ```
 
 ## Linting & Formatting
 ```bash
-nix develop .#fhs --command uv run ruff check --fix --unsafe-fixes  # Lint + fix
-nix develop .#fhs --command uv run ruff format                      # Format code
-nix develop .#fhs --command uv run pyright                          # Type check
-nix develop .#fhs --command uv run pre-commit run --all-files       # Run hooks
-nix develop .#fhs --command uv run typos --write-changes            # Spell check
-```
-
-## Testing
-```bash
-nix develop .#fhs --command uv run pytest                          # All tests
-nix develop .#fhs --command uv run pytest --ignore tests/snapshots  # Exclude snapshots
-nix develop .#fhs --command uv run pytest tests/snapshots          # Snapshots only
-nix develop .#fhs --command uv run pytest tests/performance/test_benchmarks.py  # Benchmarks
-nix develop .#fhs --command uv run pytest <file>::<test>           # Single test
-nix develop .#fhs --command uv run pytest -v -x -n 0               # Verbose, stop on fail, no parallel
+nix develop .#fhs --command python -m ruff check --fix --unsafe-fixes  # Lint + fix
+nix develop .#fhs --command python -m ruff format                      # Format code
+nix develop .#fhs --command python -m pyright                          # Type check
+nix develop .#fhs --command python -m pre_commit run --all-files       # Run hooks
+nix develop .#fhs --command python -m typos --write-changes            # Spell check
 ```
 
 ## CLI Verification
 ```bash
-nix develop .#fhs --command uv run vibe --help
-nix develop .#fhs --command uv run vibe-acp --help
+# Use python directly to run vibe CLI
+nix develop .#fhs --command python -m vibe --help
+nix develop .#fhs --command python -m vibe --prompt "Say hello" --output text
 ```
 
 ## Nix Operations

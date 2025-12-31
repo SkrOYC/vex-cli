@@ -44,7 +44,6 @@ from vibe.cli.update_notifier import (
     get_update_if_available,
 )
 from vibe.core import __version__ as CORE_VERSION
-from vibe.core.agent import Agent
 from vibe.core.autocompletion.path_prompt_adapter import render_path_prompt
 from vibe.core.config import VibeConfig
 from vibe.core.config_path import HISTORY_FILE
@@ -105,14 +104,13 @@ class VibeApp(App):
         self.config = config
         self.auto_approve = auto_approve
         self.enable_streaming = enable_streaming
-        self.agent: Agent | VibeEngine | None = None
+        self.agent: VibeEngine | None = None
         self._agent_running = False
         self._agent_initializing = False
         self._interrupt_requested = False
         self._agent_task: asyncio.Task | None = None
 
         self._loading_widget: LoadingWidget | None = None
-        self._pending_approval: asyncio.Future | None = None
         self._current_request_id: str | None = None
 
         self.event_handler: EventHandler | None = None
@@ -236,45 +234,29 @@ class VibeApp(App):
     async def on_approval_app_approval_granted(
         self, message: ApprovalApp.ApprovalGranted
     ) -> None:
-        if isinstance(self.agent, VibeLangChainEngine):
-            # Native LangChain 1.2.0 flow - use Command(resume=...)
-            await self.agent.handle_approval(True)  # type: ignore[arg-type]
-        elif self._pending_approval and not self._pending_approval.done():
-            # Legacy agent flow
-            self._pending_approval.set_result((ApprovalResponse.YES, None))
-
+        """Handle user approval of tool execution."""
+        await self.agent.handle_approval(True)  # type: ignore[arg-type]
         await self._switch_to_input_app()
 
     async def on_approval_app_approval_granted_always_tool(
         self, message: ApprovalApp.ApprovalGrantedAlwaysTool
     ) -> None:
+        """Handle user approval with 'always' permission."""
         self._set_tool_permission_always(
             message.tool_name, save_permanently=message.save_permanently
         )
-
-        if isinstance(self.agent, VibeLangChainEngine):
-            # Native LangChain 1.2.0 flow - use Command(resume=...)
-            await self.agent.handle_approval(True)  # type: ignore[arg-type]
-        elif self._pending_approval and not self._pending_approval.done():
-            # Legacy agent flow
-            self._pending_approval.set_result((ApprovalResponse.YES, None))
-
+        await self.agent.handle_approval(True)  # type: ignore[arg-type]
         await self._switch_to_input_app()
 
     async def on_approval_app_approval_rejected(
         self, message: ApprovalApp.ApprovalRejected
     ) -> None:
+        """Handle user rejection of tool execution."""
         feedback = str(
             get_user_cancellation_message(CancellationReason.OPERATION_CANCELLED)
         )
 
-        if isinstance(self.agent, VibeLangChainEngine):
-            # Native LangChain 1.2.0 flow
-            await self.agent.handle_approval(False, feedback)  # type: ignore[arg-type]  # type: ignore[arg-type]
-        elif self._pending_approval and not self._pending_approval.done():
-            # Legacy agent flow
-            self._pending_approval.set_result((ApprovalResponse.NO, feedback))
-
+        await self.agent.handle_approval(False, feedback)  # type: ignore[arg-type]
         await self._switch_to_input_app()
 
         if self._loading_widget and self._loading_widget.parent:
@@ -438,33 +420,25 @@ class VibeApp(App):
             return
 
     async def _initialize_agent(self) -> None:
+        """Initialize VibeLangChainEngine for TUI session."""
         if self.agent or self._agent_initializing:
             return
 
         self._agent_initializing = True
         try:
-            agent = Agent(
-                self.config,
-                auto_approve=self.auto_approve,
-                enable_streaming=self.enable_streaming,
+            # Instantiate VibeLangChainEngine directly
+            # For TUI mode, we use the HumanInTheLoopMiddleware for approvals,
+            # so we don't need to provide an approval_callback here
+            engine = VibeLangChainEngine(
+                config=self.config,
+                approval_callback=None,  # HITL middleware handles approvals
             )
 
-            if not self.auto_approve:
-                agent.approval_callback = self._approval_callback
+            # Initialize the engine
+            engine.initialize()
 
-            if self._loaded_messages:
-                non_system_messages = [
-                    msg
-                    for msg in self._loaded_messages
-                    if not (msg.role == Role.system)
-                ]
-                agent.messages.extend(non_system_messages)
-                logger.info(
-                    "Loaded %d messages from previous session",
-                    len(non_system_messages),
-                )
+            self.agent = engine
 
-            self.agent = agent
         except asyncio.CancelledError:
             self.agent = None
             return
@@ -519,29 +493,7 @@ class VibeApp(App):
         # For DeepAgents with ApprovalBridge, the callback is handled automatically
         # This method is called by EventHandler, but ApprovalBridge handles the flow
         # We just need to return a placeholder since the real work happens in the callback
-        return {"approved": True}  # This won't be used when ApprovalBridge is present
-
-    async def _approval_callback(
-        self, tool: str, args: dict, tool_call_id: str
-    ) -> tuple[ApprovalResponse, str | None]:
-        self._pending_approval = asyncio.Future()
-        await self._switch_to_approval_app(tool, args)
-        result = await self._pending_approval
-        self._pending_approval = None
-        return result
-
-    def _get_engine_iterator(self, prompt: str) -> AsyncIterator[BaseEvent]:
-        """Get the appropriate event iterator for the current engine.
-
-        Both VibeLangChainEngine and legacy Agent yield BaseEvent types
-        (VibeLangChainEngine maps native events internally via TUIEventMapper),
-        so we can return them directly.
-        """
-        if isinstance(self.agent, VibeLangChainEngine):
-            return self.agent.run(prompt)
-        elif isinstance(self.agent, Agent):
-            return self.agent.act(prompt)
-        raise TypeError(f"Unsupported agent type: {type(self.agent)}")
+        return {"approved": True}
 
     async def _handle_agent_turn(self, prompt: str) -> None:
         if not self.agent:
@@ -559,7 +511,7 @@ class VibeApp(App):
             rendered_prompt = render_path_prompt(
                 prompt, base_dir=self.config.effective_workdir
             )
-            async for event in self._get_engine_iterator(rendered_prompt):
+            async for event in self.agent.run(rendered_prompt):
                 if self._context_progress and self.agent:
                     current_state = self._context_progress.tokens
                     current_tokens = self.agent.stats.context_tokens
@@ -653,10 +605,7 @@ class VibeApp(App):
             return
 
         stats = self.agent.stats
-        engine_name = (
-            "VibeEngine" if isinstance(self.agent, VibeLangChainEngine) else "Agent"
-        )
-        status_text = f"""## Agent Statistics ({engine_name})
+        status_text = f"""## Agent Statistics (VibeEngine)
 
 - **Steps**: {stats.steps:,}
 - **Session Prompt Tokens**: {stats.session_prompt_tokens:,}
@@ -679,10 +628,7 @@ class VibeApp(App):
             new_config = VibeConfig.load()
 
             if self.agent:
-                if isinstance(self.agent, VibeLangChainEngine):
-                    self.agent.reset()
-                else:
-                    await self.agent.reload_with_initial_messages(config=new_config)
+                self.agent.reset()
 
             self.config = new_config
             if self._context_progress:
@@ -719,7 +665,7 @@ class VibeApp(App):
             return
 
         try:
-            await self.agent.clear_history()
+            self.agent.clear_history()
             await self._finalize_current_streaming_message()
             messages_area = self.query_one("#messages")
             await messages_area.remove_children()
@@ -802,11 +748,7 @@ class VibeApp(App):
 
         # Check if there's enough history to compact
         # For VibeLangChainEngine, we check via stats, for legacy agent via messages
-        has_history = False
-        if isinstance(self.agent, VibeLangChainEngine):
-            has_history = self.agent.stats.steps > 0
-        else:
-            has_history = len(self.agent.messages) > 1
+        has_history = self.agent.stats.steps > 0
 
         if not has_history:
             await self._mount_and_scroll(
@@ -826,7 +768,7 @@ class VibeApp(App):
         await self._mount_and_scroll(compact_msg)
 
         try:
-            await self.agent.compact()
+            self.agent.compact()
             new_tokens = self.agent.stats.context_tokens  # type: ignore
             compact_msg.set_complete(old_tokens=old_tokens, new_tokens=new_tokens)
             self.event_handler.current_compact = None
@@ -1072,14 +1014,6 @@ class VibeApp(App):
 
         if self._chat_input_container:
             self._chat_input_container.set_show_warning(self.auto_approve)
-
-        if self.agent and not isinstance(self.agent, VibeLangChainEngine):
-            self.agent.auto_approve = self.auto_approve
-
-            if self.auto_approve:
-                self.agent.approval_callback = None
-            else:
-                self.agent.approval_callback = self._approval_callback
 
         self._focus_current_bottom_app()
 

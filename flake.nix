@@ -163,6 +163,9 @@
         # Note: This should be used directly via `nix develop .#fhs`, not with direnv
         fhs = pkgs.buildFHSEnv {
           name = "vex-cli-fhs-env";
+          
+          # Set working directory to /tmp to avoid .venv conflicts
+          workingDir = "/tmp";
 
           targetPkgs = pkgs':
             with pkgs'; [
@@ -185,8 +188,24 @@
             # Set up environment for traditional venv/pip usage
             unset SOURCE_DATE_EPOCH
 
-            # Ensure library paths are correct
-            export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
+            # Fix library paths for tokenizers/Rust dependencies
+            export LD_LIBRARY_PATH="/usr/lib64:/usr/lib:${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
+
+            # Isolate from dev environment - unset Python-related variables
+            unset VIRTUAL_ENV
+            unset PYTHONPATH
+            unset PYTHONHOME
+
+            # Prevent uv from detecting/using project's .venv
+            export UV_NO_VENV_IN_PROJECT=1
+            export UV_SYSTEM_PYTHON=1
+            
+            # Use isolated cache and config
+            export UV_CACHE_DIR=/tmp/.uv-cache
+            export UV_CONFIG=/tmp/.uvrc
+
+            # Ensure Python from FHS environment is used first
+            export PATH="/usr/bin:$PATH"
           '';
         };
       };
