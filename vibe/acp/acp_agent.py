@@ -4,11 +4,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
 import sys
-from typing import TYPE_CHECKING, Any, cast, override
-import uuid
-
-if TYPE_CHECKING:
-    from vibe.core.engine.adapters import ApprovalBridge
+from typing import override
 
 from acp import (
     PROTOCOL_VERSION,
@@ -24,7 +20,6 @@ from acp import (
     PromptRequest,
     PromptResponse,
     RequestError,
-    RequestPermissionRequest,
     SessionNotification,
     SetSessionModelRequest,
     SetSessionModelResponse,
@@ -36,7 +31,6 @@ from acp.helpers import ContentBlock, SessionUpdate
 from acp.schema import (
     AgentCapabilities,
     AgentMessageChunk,
-    AllowedOutcome,
     AuthenticateResponse,
     AuthMethod,
     Implementation,
@@ -46,22 +40,19 @@ from acp.schema import (
     SessionModeState,
     TextContentBlock,
     TextResourceContents,
-    ToolCall,
 )
 from pydantic import BaseModel, ConfigDict
 
-from vibe.acp.utils import TOOL_OPTIONS, ToolOption, VibeSessionMode
+from vibe.acp.utils import VibeSessionMode
 from vibe.core import __version__
 from vibe.core.autocompletion.path_prompt_adapter import render_path_prompt
 from vibe.core.config import MissingAPIKeyError, VibeConfig, load_api_keys_from_env
 from vibe.core.engine import VibeEngine
-from vibe.core.tools.base import BaseToolConfig, ToolPermission
 from vibe.core.types import (
     AssistantEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from vibe.core.utils import CancellationReason, get_user_cancellation_message
 
 
 class AcpSession(BaseModel):
@@ -167,10 +158,6 @@ class VibeAcpAgent(AcpAgent):
         session = AcpSession(id=agent.session_id, agent=agent)
         self.sessions[session.id] = session
 
-        # Set up the approval bridge with session-specific callback
-        approval_bridge = self._create_approval_callback(session.id)
-        agent.approval_bridge = approval_bridge
-
         response = NewSessionResponse(
             sessionId=session.id,
             models=SessionModelState(
@@ -206,77 +193,6 @@ class VibeAcpAgent(AcpAgent):
 
         return disabled
 
-    def _create_approval_callback(self, session_id: str) -> ApprovalBridge:
-        from vibe.core.engine.adapters import ApprovalBridge
-
-        # Get session to access agent's config
-        session = self._get_session(session_id)
-        config = session.agent.config
-
-        # Create an ApprovalBridge that can handle ACP-style approval flow
-        approval_bridge = ApprovalBridge(config=config, approval_callback=None)
-
-        # Override the handle_interrupt method to use ACP-style permissions
-
-        async def custom_handle_interrupt(interrupt: dict[str, Any]) -> dict[str, Any]:
-            # Extract the tool information from the interrupt
-            action_request = approval_bridge._extract_action_request(interrupt)
-            if not action_request:
-                return {"approved": True}  # Auto-approve if no action request
-
-            # Generate a unique tool call ID for ACP
-            tool_call_id = str(uuid.uuid4())
-
-            # Create the tool call update for ACP
-            tool_call = ToolCall(toolCallId=tool_call_id)
-
-            # Request permission from the user via ACP
-            request = RequestPermissionRequest(
-                sessionId=session_id, toolCall=tool_call, options=TOOL_OPTIONS
-            )
-
-            response = await self.connection.requestPermission(request)
-
-            # Parse the response and return the approval decision
-            if response.outcome.outcome == "selected":
-                outcome = cast(AllowedOutcome, response.outcome)
-                match outcome.optionId:
-                    case ToolOption.ALLOW_ONCE:
-                        return {"approved": True}
-                    case ToolOption.ALLOW_ALWAYS:
-                        # Update session agent config to always allow this tool
-                        session = self._get_session(session_id)
-                        tool_name = action_request.get("name", "")
-                        if tool_name:
-                            if tool_name not in session.agent.config.tools:
-                                session.agent.config.tools[tool_name] = BaseToolConfig()
-                            session.agent.config.tools[
-                                tool_name
-                            ].permission = ToolPermission.ALWAYS
-                        return {"approved": True}
-                    case ToolOption.REJECT_ONCE:
-                        return {
-                            "approved": False,
-                            "feedback": "User rejected the tool call",
-                        }
-                    case _:
-                        return {
-                            "approved": False,
-                            "feedback": f"Unknown option: {outcome.optionId}",
-                        }
-            else:
-                return {
-                    "approved": False,
-                    "feedback": str(
-                        get_user_cancellation_message(
-                            CancellationReason.OPERATION_CANCELLED
-                        )
-                    ),
-                }
-
-        approval_bridge.handle_interrupt = custom_handle_interrupt
-        return approval_bridge
-
     def _get_session(self, session_id: str) -> AcpSession:
         if session_id not in self.sessions:
             raise RequestError.invalid_params({"session": "Not found"})
@@ -304,34 +220,21 @@ class VibeAcpAgent(AcpAgent):
             disabled_tools=self._get_disabled_tools_from_capabilities(),
         )
 
-        # VibeEngine doesn't have reload_with_initial_messages method
-        # We need to recreate the engine with the new config but preserve conversation history
-
         # Extract current conversation history before recreating the engine
         current_messages = session.agent.get_current_messages()
 
-        # Convert LangChain messages back to LLMMessage format for initial_messages
-        # For now, we'll use the initial messages functionality if available
-        # or recreate the VibeEngine with the new model
-        approval_bridge = session.agent.approval_bridge
         new_agent = VibeEngine(config=new_config, approval_callback=None)
-        new_agent.approval_bridge = approval_bridge  # type: ignore[assignment]
 
-        # Initialize the new agent to create the underlying DeepAgents instance
+        # Initialize the new agent
         new_agent.initialize()
 
         # Copy over the preserved conversation state to the new agent
-        # We need to transfer the state from the old agent to the new one
         if current_messages and new_agent._agent:
-            # Update the new agent's state with the preserved messages
-            # We need to transfer the state from the old agent to the new one
-            if current_messages and new_agent._agent:
-                # Update the new agent's state with the preserved messages
-                new_agent._agent.update_state(  # type: ignore
-                    {"configurable": {"thread_id": new_agent.session_id}},
-                    {"messages": current_messages},
-                    as_node="human",  # Use a generic node for state transfer
-                )
+            new_agent._agent.update_state(  # type: ignore
+                {"configurable": {"thread_id": new_agent.session_id}},
+                {"messages": current_messages},
+                as_node="human",
+            )
 
         session.agent = new_agent
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from vibe.core.tools.base import BaseTool
 from vibe.core.tools.filesystem.shared import ViewTrackerService

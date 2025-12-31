@@ -27,9 +27,9 @@ from pathlib import Path
 import time
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel, ConfigDict
+
 from vibe.core.tools.filesystem.shared import ViewTrackerService
 from vibe.core.tools.filesystem.types import (
     LENGTH_DIFF_RATIO_THRESHOLD,

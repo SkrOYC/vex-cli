@@ -28,7 +28,7 @@ from pathlib import Path
 import re
 from typing import Any, ClassVar, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from vibe.core.tools.base import BaseTool
 from vibe.core.tools.filesystem.types import (
@@ -216,7 +216,7 @@ class GrepTool(BaseTool):
         self,
         path: str = ".",
         query: str = "",
-        patterns: list[str] = [],
+        patterns: list[str] = None,
         case_sensitive: bool = False,
         regex: bool = False,
         recursive: bool = True,
@@ -243,6 +243,8 @@ class GrepTool(BaseTool):
             ValueError: If regex pattern is invalid.
         """
         # Resolve path to absolute
+        if patterns is None:
+            patterns = []
         resolved_path = self._resolve_path(path)
 
         # Validate path exists

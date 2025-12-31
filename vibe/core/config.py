@@ -334,13 +334,9 @@ class VibeConfig(BaseSettings):
         ),
     )
 
-    use_deepagents: bool = Field(default=False)
-    use_langchain: bool = Field(default=False)
-    enable_subagents: bool = Field(default=True)
-    enable_planning: bool = Field(default=True)
     max_recursion_depth: int = Field(default=1000)
 
-    # Summarization settings (for future DeepAgents customization)
+    # Summarization settings (for future LLM context optimization)
     enable_summarization: bool = Field(default=False)
     summarization_trigger_tokens: int = Field(default=170000)
     summarization_keep_messages: int = Field(default=6)

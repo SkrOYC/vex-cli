@@ -4,20 +4,20 @@
 [![License](https://img.shields.io/github/license/SkrOYC/vex-cli)](https://github.com/SkrOYC/vex-cli/blob/main/LICENSE)
 
 ```
-██████████████████░░
-██████████████████░░
+████████████████████░░
+████████████████████░░
 ████  ██████  ████░░
 ████    ██    ████░░
 ████          ████░░
 ████  ██  ██  ████░░
 ██      ██      ██░░
-██████████████████░░
-██████████████████░░
+████████████████████░░
+████████████████████░░
 ```
 
-**A modern CLI coding assistant powered by DeepAgents architecture.**
+**A modern CLI coding assistant powered by LangChain 1.2.0.**
 
-vex-cli is a command-line coding assistant built on the DeepAgents framework. It provides a conversational interface to your codebase, allowing you to use natural language to explore, modify, and interact with your projects through a powerful set of tools.
+vex-cli is a command-line coding assistant built on the LangChain framework. It provides a conversational interface to your codebase, allowing you to use natural language to explore, modify, and interact with your projects through a powerful set of tools.
 
 > [!WARNING]
 > vex-cli works on Windows, but we officially support and target UNIX environments.
@@ -51,9 +51,8 @@ pip install -e .
 
 ## Features
 
-- **DeepAgents Architecture**: Modern agent engine powered by [DeepAgents](https://github.com/langchain-ai/deepagents) for reliable, scalable conversations.
-- **Advanced Planning**: Structured task management with TodoListMiddleware for complex multi-step workflows.
-- **Subagent Delegation**: Parallel task execution with isolated contexts for efficient processing.
+- **LangChain 1.2.0 Architecture**: Modern agent engine powered by [LangChain](https://python.langchain.com) for reliable, scalable conversations.
+- **Advanced Planning**: Structured task management for complex multi-step workflows.
 - **Context Intelligence**: Automatic summarization middleware for long conversations.
 - **Interactive Chat**: A conversational AI agent that understands your requests and breaks down complex tasks.
 - **Powerful Toolset**: Enhanced filesystem tools with security and better error handling.
@@ -170,9 +169,6 @@ To use a custom system prompt, set the `system_prompt_id` in your configuration 
 ```toml
 # Use a custom system prompt
 system_prompt_id = "my_custom_prompt"
-
-# Enable DeepAgents features (default: false)
-use_deepagents = true
 ```
 
 This will load the prompt from `~/.vibe/prompts/my_custom_prompt.md`.
