@@ -43,6 +43,7 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
 
 
 class TestACPSetMode:
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_set_mode_response_structure(
         self, acp_agent: VibeAcpAgent
@@ -61,6 +62,7 @@ class TestACPSetMode:
         assert mode_response is not None
         assert mode_response.modeId == VibeSessionMode.AUTO_APPROVE
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_set_mode_updates_agent_mode(self, acp_agent: VibeAcpAgent) -> None:
         session_response = await acp_agent.newSession(

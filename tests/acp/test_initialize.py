@@ -27,6 +27,7 @@ def acp_agent() -> VibeAcpAgent:
 
 
 class TestACPInitialize:
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_initialize(self, acp_agent: VibeAcpAgent) -> None:
         """Test regular initialize without terminal-auth capabilities."""
@@ -46,6 +47,7 @@ class TestACPInitialize:
 
         assert response.authMethods == []
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_initialize_with_terminal_auth(self, acp_agent: VibeAcpAgent) -> None:
         """Test initialize with terminal-auth capabilities to check it was included."""

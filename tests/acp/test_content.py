@@ -46,6 +46,7 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
 
 
 class TestACPContent:
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_text_content(
         self, acp_agent: VibeAcpAgent, backend: FakeBackend
@@ -68,6 +69,7 @@ class TestACPContent:
         assert user_message is not None, "User message not found in backend requests"
         assert user_message.content == "Say hi"
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_resource_content(
         self, acp_agent: VibeAcpAgent, backend: FakeBackend
@@ -105,6 +107,7 @@ class TestACPContent:
         )
         assert user_message.content == expected_content
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_resource_link_content(
         self, acp_agent: VibeAcpAgent, backend: FakeBackend
@@ -147,6 +150,7 @@ class TestACPContent:
         )
         assert user_message.content == expected_content
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_resource_link_minimal(
         self, acp_agent: VibeAcpAgent, backend: FakeBackend

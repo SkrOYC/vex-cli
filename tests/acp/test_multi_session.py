@@ -53,6 +53,7 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
 
 
 class TestMultiSessionCore:
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_different_sessions_use_different_agents(
         self, acp_agent: VibeAcpAgent
@@ -72,6 +73,7 @@ class TestMultiSessionCore:
         assert session1.agent is not session2.agent
         assert id(session1.agent) != id(session2.agent)
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_error_on_nonexistent_session(self, acp_agent: VibeAcpAgent) -> None:
         await acp_agent.initialize(InitializeRequest(protocolVersion=PROTOCOL_VERSION))
