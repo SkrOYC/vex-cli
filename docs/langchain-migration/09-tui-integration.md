@@ -18,7 +18,6 @@ class VibeApp(App):
         self.config = config
         self.engine = VibeEngine(
             config=config,
-            approval_callback=self._create_approval_callback(),
         )
 
 # After: Using VibeLangChainEngine with native events
@@ -30,7 +29,6 @@ class VibeApp(App):
         self.config = config
         self.engine = VibeLangChainEngine(  # Changed class name
             config=config,
-            approval_callback=self._create_approval_callback(),
         )
 ```
 

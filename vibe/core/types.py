@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum, auto
 from typing import Annotated, Any, Literal, Protocol
@@ -203,11 +202,6 @@ class Role(StrEnum):
     tool = auto()
 
 
-class ApprovalResponse(StrEnum):
-    YES = "y"
-    NO = "n"
-
-
 class LLMMessage(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -296,14 +290,3 @@ class OutputFormat(StrEnum):
     TEXT = auto()
     JSON = auto()
     STREAMING = auto()
-
-
-type AsyncApprovalCallback = Callable[
-    [str, dict[str, Any], str], Awaitable[tuple[ApprovalResponse, str | None]]
-]
-
-type SyncApprovalCallback = Callable[
-    [str, dict[str, Any], str], tuple[ApprovalResponse, str | None]
-]
-
-type ApprovalCallback = AsyncApprovalCallback | SyncApprovalCallback
