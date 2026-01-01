@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from langgraph.types import Command
 import pytest
 
 from tests.mock.utils import (
@@ -17,15 +18,13 @@ class TestHITLWorkflow:
     """Test complete HITL interrupt and approval workflow."""
 
     @pytest.mark.asyncio
-    async def test_single_tool_approve(self, langchain_config: VibeConfig):
+    async def test_single_tool_approve(
+        self, hitl_engine: tuple[VibeLangChainEngine, FakeInterruptedAgent]
+    ):
         """Test approving a single tool execution."""
-        engine = VibeLangChainEngine(langchain_config)
-        engine.initialize()
+        engine, fake_agent = hitl_engine
 
-        # Mock agent with interrupt
-        fake_agent = FakeInterruptedAgent()
         fake_agent.add_interrupt("bash", {"command": "ls"}, "Execute bash")
-        engine._agent = fake_agent  # type: ignore[assignment]
 
         # Handle approval
         await engine.handle_approval(True, None)
@@ -36,14 +35,13 @@ class TestHITLWorkflow:
         assert decisions[0]["decisions"][0]["type"] == "approve"
 
     @pytest.mark.asyncio
-    async def test_single_tool_reject(self, langchain_config: VibeConfig):
+    async def test_single_tool_reject(
+        self, hitl_engine: tuple[VibeLangChainEngine, FakeInterruptedAgent]
+    ):
         """Test rejecting a single tool execution."""
-        engine = VibeLangChainEngine(langchain_config)
-        engine.initialize()
+        engine, fake_agent = hitl_engine
 
-        fake_agent = FakeInterruptedAgent()
         fake_agent.add_interrupt("bash", {"command": "rm -rf /"}, "Dangerous command")
-        engine._agent = fake_agent  # type: ignore[assignment]
 
         await engine.handle_approval(False, "Unsafe command")
 
@@ -54,16 +52,12 @@ class TestHITLWorkflow:
 
     @pytest.mark.asyncio
     async def test_single_tool_default_reject_message(
-        self,
-        langchain_config: VibeConfig,
+        self, hitl_engine: tuple[VibeLangChainEngine, FakeInterruptedAgent]
     ):
         """Test rejecting with default message."""
-        engine = VibeLangChainEngine(langchain_config)
-        engine.initialize()
+        engine, fake_agent = hitl_engine
 
-        fake_agent = FakeInterruptedAgent()
         fake_agent.add_interrupt("bash", {"command": "test"}, "Test")
-        engine._agent = fake_agent  # type: ignore[assignment]
 
         await engine.handle_approval(False, None)
 
@@ -71,19 +65,18 @@ class TestHITLWorkflow:
         assert len(decisions) == 1
         assert decisions[0]["decisions"][0]["type"] == "reject"
         message = decisions[0]["decisions"][0].get("message", "")
-        assert "Operation rejected by user" in message
+        assert message == "Operation rejected by user"
 
     @pytest.mark.asyncio
-    async def test_multi_tool_approval(self, langchain_config: VibeConfig):
+    async def test_multi_tool_approval(
+        self, hitl_engine: tuple[VibeLangChainEngine, FakeInterruptedAgent]
+    ):
         """Test approving/rejecting multiple tools individually."""
-        engine = VibeLangChainEngine(langchain_config)
-        engine.initialize()
+        engine, fake_agent = hitl_engine
 
-        fake_agent = FakeInterruptedAgent()
         fake_agent.add_interrupt("bash", {"command": "ls"}, "List files")
         fake_agent.add_interrupt("read_file", {"path": "test.txt"}, "Read file")
         fake_agent.add_interrupt("edit", {"path": "test.txt"}, "Edit file")
-        engine._agent = fake_agent  # type: ignore[assignment]
 
         # Approve individually
         approvals = [True, False, True]
@@ -99,19 +92,18 @@ class TestHITLWorkflow:
         assert decisions[0]["decisions"][2]["type"] == "approve"
 
     @pytest.mark.asyncio
-    async def test_approve_all(self, langchain_config: VibeConfig):
+    async def test_approve_all(
+        self, hitl_engine: tuple[VibeLangChainEngine, FakeInterruptedAgent]
+    ):
         """Test approving all tools with batch shortcut."""
-        engine = VibeLangChainEngine(langchain_config)
-        engine.initialize()
+        engine, fake_agent = hitl_engine
 
-        fake_agent = FakeInterruptedAgent()
         for i in range(5):
             fake_agent.add_interrupt(
                 "bash",
                 {"command": f"test{i}"},
                 f"Test {i}",
             )
-        engine._agent = fake_agent  # type: ignore[assignment]
 
         await engine.handle_approve_all(5)
 
@@ -121,19 +113,18 @@ class TestHITLWorkflow:
         assert all(d["type"] == "approve" for d in decisions[0]["decisions"])
 
     @pytest.mark.asyncio
-    async def test_reject_all(self, langchain_config: VibeConfig):
+    async def test_reject_all(
+        self, hitl_engine: tuple[VibeLangChainEngine, FakeInterruptedAgent]
+    ):
         """Test rejecting all tools with batch shortcut."""
-        engine = VibeLangChainEngine(langchain_config)
-        engine.initialize()
+        engine, fake_agent = hitl_engine
 
-        fake_agent = FakeInterruptedAgent()
         for i in range(3):
             fake_agent.add_interrupt(
                 "bash",
                 {"command": f"test{i}"},
                 f"Test {i}",
             )
-        engine._agent = fake_agent  # type: ignore[assignment]
 
         await engine.handle_reject_all(3, "Batch reject")
 
@@ -144,14 +135,13 @@ class TestHITLWorkflow:
         assert all(d["message"] == "Batch reject" for d in decisions[0]["decisions"])
 
     @pytest.mark.asyncio
-    async def test_length_mismatch(self, langchain_config: VibeConfig):
+    async def test_length_mismatch(
+        self, hitl_engine: tuple[VibeLangChainEngine, FakeInterruptedAgent]
+    ):
         """Test ValueError on length mismatch."""
-        engine = VibeLangChainEngine(langchain_config)
-        engine.initialize()
+        engine, fake_agent = hitl_engine
 
-        fake_agent = FakeInterruptedAgent()
         fake_agent.add_interrupt("bash", {"command": "test"}, "Test")
-        engine._agent = fake_agent  # type: ignore[assignment]
 
         with pytest.raises(ValueError, match="Length mismatch"):
             await engine.handle_multi_tool_approval([True, False], [None])
@@ -295,14 +285,23 @@ class TestFakeInterruptedAgent:
         assert decisions[1]["decisions"][0]["type"] == "reject"
         assert decisions[1]["decisions"][0]["message"] == "Unsafe"
 
-    def test_get_ainvoke_call_count(self, fake_interrupted_agent: FakeInterruptedAgent):
+    @pytest.mark.asyncio
+    async def test_get_ainvoke_call_count(
+        self, fake_interrupted_agent: FakeInterruptedAgent
+    ):
         """Test getting ainvoke call count."""
+        from tests.mock.utils import create_mock_hitl_response
+
         assert fake_interrupted_agent.get_ainvoke_call_count() == 0
 
-        # The count is tracked but not incremented by this mock
-        # This tests that the attribute exists and can be accessed
-        count = fake_interrupted_agent.get_ainvoke_call_count()
-        assert isinstance(count, int)
+        # Call ainvoke and verify count increments
+        command = Command(resume=create_mock_hitl_response(approved=True))
+        await fake_interrupted_agent.ainvoke(command)
+        assert fake_interrupted_agent.get_ainvoke_call_count() == 1
+
+        # Call ainvoke again
+        await fake_interrupted_agent.ainvoke(command)
+        assert fake_interrupted_agent.get_ainvoke_call_count() == 2
 
     def test_allowed_decisions_custom(
         self, fake_interrupted_agent: FakeInterruptedAgent

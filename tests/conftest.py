@@ -135,3 +135,16 @@ def fake_interrupted_agent():
     from tests.stubs.fake_backend import FakeInterruptedAgent
 
     return FakeInterruptedAgent()
+
+
+@pytest.fixture
+def hitl_engine(langchain_config: VibeConfig):
+    """Fixture to create a VibeLangChainEngine with a fake interrupted agent."""
+    from tests.stubs.fake_backend import FakeInterruptedAgent
+    from vibe.core.engine.langchain_engine import VibeLangChainEngine
+
+    engine = VibeLangChainEngine(langchain_config)
+    engine.initialize()
+    fake_agent = FakeInterruptedAgent()
+    engine._agent = fake_agent  # type: ignore[assignment]
+    return engine, fake_agent

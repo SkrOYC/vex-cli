@@ -112,7 +112,7 @@ class TestHITLResponseFormat:
 
         assert len(response["decisions"]) == 2
         assert response["decisions"][0]["type"] == "reject"
-        assert response["decisions"][0]["message"] is None
+        assert response["decisions"][0]["message"] == "Rejected"
         assert response["decisions"][1]["type"] == "approve"
 
     def test_large_multi_tool_response(self):

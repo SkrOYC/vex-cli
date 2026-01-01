@@ -100,5 +100,5 @@ def create_mock_multi_tool_response(
         if approved:
             decisions.append({"type": "approve"})
         else:
-            decisions.append({"type": "reject", "message": feedback})
+            decisions.append({"type": "reject", "message": feedback or "Rejected"})
     return HITLResponse(decisions=decisions)
