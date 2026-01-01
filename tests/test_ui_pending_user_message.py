@@ -10,7 +10,7 @@ import pytest
 from vibe.cli.textual_ui.app import VibeApp
 from vibe.cli.textual_ui.widgets.chat_input.container import ChatInputContainer
 from vibe.cli.textual_ui.widgets.messages import InterruptMessage, UserMessage
-from vibe.core.agent import Agent
+from vibe.core.engine import VibeLangChainEngine
 from vibe.core.config import SessionLoggingConfig, VibeConfig
 from vibe.core.types import BaseEvent
 
@@ -27,17 +27,55 @@ async def _wait_for(
     return None
 
 
-class StubAgent(Agent):
+class StubAgent:
+    """Mock engine implementing EngineInterface protocol for testing."""
+
     def __init__(self) -> None:
+        from vibe.core.types import AgentStatsProtocol
+
         self.messages: list = []
-        self.stats = SimpleNamespace(context_tokens=0)
+        self.stats: AgentStatsProtocol = SimpleNamespace(
+            context_tokens=0,
+            steps=0,
+            session_cost=0.0,
+            session_prompt_tokens=0,
+            session_completion_tokens=0,
+            tool_calls_agreed=0,
+            tool_calls_rejected=0,
+            tool_calls_failed=0,
+            tool_calls_succeeded=0,
+            last_turn_prompt_tokens=0,
+            last_turn_completion_tokens=0,
+            last_turn_duration=0.0,
+            tokens_per_second=0.0,
+            input_price_per_million=0.0,
+            output_price_per_million=0.0,
+        )
+        self.session_id = "test-session-id"
+
+    async def run(self, message: str) -> AsyncGenerator[BaseEvent]:
+        """Run a conversation turn (matches EngineInterface)."""
+        if False:
+            yield
+        else:
+            return
+
+    async def clear_history(self) -> None:
+        """Clear conversation history."""
+        self.messages.clear()
+        self.stats.steps = 0
+
+    async def compact(self) -> str:
+        """Compact conversation history."""
+        return ""
+
+    def get_log_path(self) -> str | None:
+        """Get session log path."""
+        return None
 
     async def initialize(self) -> None:
+        """Initialize engine (no-op for stub)."""
         return
-
-    async def act(self, msg: str) -> AsyncGenerator[BaseEvent]:
-        if False:
-            yield msg
 
 
 @pytest.fixture

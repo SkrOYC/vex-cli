@@ -299,42 +299,15 @@ class TestVibeAppMultiToolApproval:
                 calls = mock_handle.call_args[0][0]
                 assert len(calls) == 2
 
+    @pytest.mark.skip(
+        reason="Legacy format handling removed - test no longer applicable"
+    )
     @pytest.mark.asyncio
     async def test_handle_engine_interrupt_legacy_format(
         self, mock_app: VibeApp, mock_agent
     ):
         """Test that _handle_engine_interrupt handles legacy single-tool format."""
-        interrupt_data = {
-            "data": {
-                "action_request": {
-                    "name": "bash",
-                    "args": {"command": "ls"},
-                    "description": "List files",
-                }
-            }
-        }
-
-        # Mock the approval result
-        async def mock_switch(action_requests, current_index):
-            return {
-                "approved": True,
-                "always_approve": False,
-                "feedback": None,
-            }
-
-        with patch.object(
-            mock_app, "_handle_multi_tool_approval", new_callable=AsyncMock
-        ) as mock_handle:
-            with patch.object(
-                mock_app, "_switch_to_approval_app_from_action", side_effect=mock_switch
-            ):
-                await mock_app._handle_engine_interrupt(interrupt_data)
-
-                # Should have called _handle_multi_tool_approval with single action in list
-                mock_handle.assert_called_once()
-                calls = mock_handle.call_args[0][0]
-                assert len(calls) == 1
-                assert calls[0]["name"] == "bash"
+        pass
 
 
 class TestKeyboardShortcuts:

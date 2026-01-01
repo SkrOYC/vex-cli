@@ -6,7 +6,7 @@ from textual.widgets.text_area import TextAreaTheme
 from tests.stubs.fake_backend import FakeBackend
 from vibe.cli.textual_ui.app import VibeApp
 from vibe.cli.textual_ui.widgets.chat_input import ChatTextArea
-from vibe.core.agent import Agent
+from vibe.core.engine import VibeLangChainEngine
 from vibe.core.config import SessionLoggingConfig, VibeConfig
 
 
@@ -35,12 +35,18 @@ class BaseSnapshotTestApp(VibeApp):
 
         super().__init__(config=config, **kwargs)
 
-        self.agent = Agent(
-            config,
-            auto_approve=self.auto_approve,
-            enable_streaming=self.enable_streaming,
-            backend=FakeBackend(),
-        )
+        # VibeLangChainEngine is used instead of legacy Agent
+        from vibe.core.engine import VibeLangChainEngine
+
+        try:
+            engine = VibeLangChainEngine(config=config)
+            engine.initialize()
+            self.agent = engine
+        except Exception as e:
+            # Fail fast with clear error if initialization fails
+            raise AssertionError(
+                f"Failed to initialize VibeLangChainEngine for snapshot testing: {e}"
+            ) from e
 
     async def on_mount(self) -> None:
         await super().on_mount()

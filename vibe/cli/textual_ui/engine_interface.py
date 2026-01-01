@@ -10,11 +10,14 @@ from vibe.core.types import AgentStatsProtocol, BaseEvent
 
 @runtime_checkable
 class EngineInterface(Protocol):
-    """Minimal interface that both Agent and VibeEngine satisfy.
+    """Minimal interface for VibeLangChainEngine.
 
-    This protocol defines the common interface used by the TUI to interact
-    with either the legacy Agent or the DeepAgents-powered VibeEngine,
-    allowing the TUI to work with both implementations transparently.
+    This protocol defines the interface used by the TUI to interact
+    with VibeLangChainEngine. The legacy Agent class has been removed
+    as part of migration to LangChain 1.2.0.
+
+    Note: The `act()` method was part of the legacy Agent interface
+    and is not used by VibeLangChainEngine.
     """
 
     @property

@@ -65,6 +65,169 @@ nix flake check                                # Check flake
 
 **Workflow**: Make changes → lint → type check → `pytest -x`
 
+# LangChain Migration Testing Guidelines
+
+## Test Infrastructure Overview
+
+As of LangChain 1.2.0 migration, the test infrastructure uses:
+- `FakeVibeLangChainEngine`: Deterministic mock of `VibeLangChainEngine` for offline testing
+- `EngineInterface` protocol: Common interface that both real and fake engines implement
+- `VibeEngineStats`: Statistics tracking used by both production and test engines
+
+## Using FakeVibeLangChainEngine
+
+The `FakeVibeLangChainEngine` class (in `tests/stubs/fake_backend.py`) provides:
+- Deterministic event streaming (no random LLM calls)
+- Full `EngineInterface` implementation for TUI compatibility
+- Configurable synthetic event sequences for various test scenarios
+- Stats tracking that matches production behavior
+
+**Example:**
+```python
+from tests.stubs.fake_backend import FakeVibeLangChainEngine
+
+engine = FakeVibeLangChainEngine(
+    config=test_config,
+    events_to_yield=[
+        AssistantEvent(content="Hello"),
+        ToolCallEvent(tool_name="bash", args={"command": "echo test"}),
+        ToolResultEvent(tool_name="bash", result={"output": "test"}),
+    ],
+)
+engine.initialize()
+
+async for event in engine.run("Test message"):
+    process_event(event)
+```
+
+## Test Fixtures
+
+Use fixtures from `tests/conftest.py` for consistent test configuration:
+
+- `fake_engine_basic_response()`: Simple assistant response
+- `fake_engine_with_tool_call()`: Complete tool execution flow
+- `fake_engine_with_compact()`: For testing compact functionality
+- `fake_engine_with_events()`: Generic fixture for custom event sequences
+
+## Testing Patterns
+
+### Pattern 1: Basic Conversation
+```python
+async def test_conversation():
+    engine = fake_engine_basic_response()
+    events = []
+    async for event in engine.run("Hello"):
+        events.append(event)
+    assert isinstance(events[0], AssistantEvent)
+```
+
+### Pattern 2: Tool Execution
+```python
+async def test_tool_execution():
+    engine = fake_engine_with_tool_call()
+    events = []
+    async for event in engine.run("Execute command"):
+        events.append(event)
+    assert any(isinstance(e, ToolCallEvent) for e in events)
+    assert any(isinstance(e, ToolResultEvent) for e in events)
+```
+
+### Pattern 3: Stats Verification
+```python
+async def test_stats():
+    engine = fake_engine_basic_response()
+    await engine.run("Test")
+    assert engine.stats.steps == 1
+    assert engine.stats.session_cost >= 0
+```
+
+### Pattern 4: Compact Functionality
+```python
+async def test_compact():
+    engine = fake_engine_with_compact()
+    await engine.run("Test")
+    result = engine.compact()
+    assert "Compacted" in result
+    assert len(engine._events) < 5  # Reduced from 5 to ~2
+```
+
+## Migration Checklist for Tests
+
+When updating tests from legacy `Agent` to `VibeLangChainEngine`:
+
+- [ ] Replace `Agent(config, backend=backend)` with `FakeVibeLangChainEngine(config=config)`
+- [ ] Update `agent.act()` calls to `agent.run()`
+- [ ] Update `agent.messages` to use event streaming
+- [ ] Replace `AgentStats` with `VibeEngineStats`
+- [ ] Update stats assertions to use `engine.stats` property
+- [ ] Remove `FakeBackend` usage if not needed
+- [ ] Update `reload_with_initial_messages()` to use LangGraph state
+- [ ] Verify all tests work offline (no API keys required)
+
+## Common Pitfalls to Avoid
+
+### Pitfall 1: Not Initializing Fake Engine
+```python
+# WRONG - Will fail at runtime
+engine = FakeVibeLangChainEngine(config=test_config)
+async for event in engine.run("Hello"):  # Error!
+    pass
+
+# CORRECT - Always initialize before using
+engine = FakeVibeLangChainEngine(config=test_config)
+engine.initialize()
+async for event in engine.run("Hello"):
+    pass
+```
+
+### Pitfall 2: Collecting Async Generator Incorrectly
+```python
+# WRONG - Tries to collect all events at once
+events = list(engine.run("Hello"))  # Doesn't work!
+
+# CORRECT - Iterate through the async generator
+events = []
+async for event in engine.run("Hello"):
+    events.append(event)
+```
+
+### Pitfall 3: Using Legacy Agent Methods
+```python
+# WRONG - Agent class had these methods
+agent.auto_approve = True
+agent.messages.append(...)
+
+# CORRECT - Use VibeLangChainEngine's interface
+async for event in engine.run(message):
+    process_event(event)
+assert engine.stats.steps == expected
+```
+
+## Testing with Mock Models
+
+For integration tests requiring LLM behavior (not just event streaming):
+
+```python
+from tests.mock.utils import get_mocking_env
+
+# Set up mock responses
+env = get_mocking_env([
+    mock_llm_chunk(content="Response 1"),
+    mock_llm_chunk(content="Response 2"),
+])
+with env:
+    # Test with mock model
+    pass
+```
+
+## Documentation Reference
+
+- Test Infrastructure Guide: `tests/migration/test_infrastructure.md`
+- Mock Utilities: `tests/mock/utils.py`
+- Mock Implementations: `tests/stubs/fake_backend.py`
+- Test Fixtures: `tests/conftest.py`
+- Type Definitions: `vibe/core/types.py`
+
 # Implementation Notes
 
 ## FHS Environment Requirement

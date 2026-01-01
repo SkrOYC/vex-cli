@@ -148,3 +148,93 @@ def hitl_engine(langchain_config: VibeConfig):
     fake_agent = FakeInterruptedAgent()
     engine._agent = fake_agent  # type: ignore[assignment]
     return engine, fake_agent
+
+
+@pytest.fixture
+def fake_engine_with_events():
+    """Create FakeVibeLangChainEngine with configurable synthetic events.
+
+    Usage:
+        def test_example(fake_engine_with_events):
+            engine = fake_engine_with_events(
+                events_to_yield=[AssistantEvent(content="Hello")]
+            )
+            async for event in engine.run("Test"):
+                process(event)
+    """
+    from tests.stubs.fake_backend import FakeVibeLangChainEngine
+
+    def _create_engine(events_to_yield: list | None = None):
+        engine = FakeVibeLangChainEngine(
+            config=langchain_config(),
+            events_to_yield=events_to_yield,
+        )
+        engine.initialize()
+        return engine
+
+    return _create_engine
+
+
+@pytest.fixture
+def fake_engine_basic_response():
+    """Create FakeVibeLangChainEngine with basic assistant response."""
+    from tests.stubs.fake_backend import FakeVibeLangChainEngine
+    from vibe.core.types import AssistantEvent
+
+    engine = FakeVibeLangChainEngine(
+        config=langchain_config(),
+        events_to_yield=[
+            AssistantEvent(content="This is a test response"),
+        ],
+    )
+    engine.initialize()
+    return engine
+
+
+@pytest.fixture
+def fake_engine_with_tool_call():
+    """Create FakeVibeLangChainEngine with tool execution flow."""
+    from tests.stubs.fake_backend import FakeVibeLangChainEngine
+    from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
+    from vibe.core.tools.filesystem.bash import BashTool
+
+    engine = FakeVibeLangChainEngine(
+        config=langchain_config(),
+        events_to_yield=[
+            AssistantEvent(content="I'll execute a command"),
+            ToolCallEvent(
+                tool_name="bash",
+                args={"command": "echo 'test'"},
+                tool_call_id="test-call-1",
+                tool_class=BashTool,
+            ),
+            ToolResultEvent(
+                tool_name="bash",
+                tool_call_id="test-call-1",
+                tool_class=BashTool,
+                result={"output": "test"},
+            ),
+            AssistantEvent(content="Command executed successfully"),
+        ],
+    )
+    engine.initialize()
+    return engine
+
+
+@pytest.fixture
+def fake_engine_with_compact():
+    """Create FakeVibeLangChainEngine for testing compact functionality."""
+    from tests.stubs.fake_backend import FakeVibeLangChainEngine
+    from vibe.core.types import AssistantEvent
+
+    engine = FakeVibeLangChainEngine(
+        config=langchain_config(),
+        events_to_yield=[
+            AssistantEvent(content="Message 1"),
+            AssistantEvent(content="Message 2"),
+            AssistantEvent(content="Message 3"),
+            AssistantEvent(content="Message 4"),
+        ],
+    )
+    engine.initialize()
+    return engine

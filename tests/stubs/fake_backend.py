@@ -204,3 +204,143 @@ class FakeInterruptedAgent:
         if hasattr(command, "resume") and isinstance(command.resume, dict):
             hitl_response = HITLResponse(**command.resume)
             self._decisions_received.append(hitl_response)
+
+
+class FakeVibeLangChainEngine:
+    """Mock implementation of VibeLangChainEngine for testing.
+
+    This mock provides deterministic test execution without requiring real LLM calls
+    or LangGraph state management. It implements the EngineInterface protocol
+    and can be configured to yield synthetic events for various test scenarios.
+
+    Usage:
+        engine = FakeVibeLangChainEngine(
+            config=test_config,
+            events_to_yield=[
+                AssistantEvent(content="Test response"),
+                ToolCallEvent(tool_name="bash", args=...),
+                ToolResultEvent(tool_name="bash", result=...),
+            ],
+        )
+        engine.initialize()
+
+        # Stream events
+        async for event in engine.run("Hello"):
+            process_event(event)
+    """
+
+    def __init__(
+        self,
+        config,
+        events_to_yield: list | None = None,
+    ) -> None:
+        from vibe.core.config import VibeConfig
+        from vibe.core.engine.langchain_engine import VibeEngineStats
+        from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
+
+        self.config: VibeConfig = config
+        self._events: list = list(events_to_yield or [])
+        self._stats = VibeEngineStats()
+        self._session_id = "fake-test-session"
+        self._initialized = False
+        self._current_run_index = 0
+
+    def initialize(self) -> None:
+        """Initialize the fake engine."""
+        self._initialized = True
+
+    async def run(self, user_message: str):
+        """Run a conversation turn, yielding synthetic events.
+
+        Args:
+            user_message: The user message to process
+
+        Yields:
+            BaseEvent instances from the pre-configured event list
+        """
+        if not self._initialized:
+            self.initialize()
+
+        self._current_run_index = 0
+
+        for event in self._events:
+            yield event
+            self._current_run_index += 1
+
+            # Update stats based on event type
+            if isinstance(event, AssistantEvent):
+                self._stats.steps += 1
+            elif isinstance(event, ToolCallEvent):
+                self._stats.tool_calls_agreed += 1
+            elif isinstance(event, ToolResultEvent):
+                if event.error:
+                    self._stats.tool_calls_failed += 1
+                else:
+                    self._stats.tool_calls_succeeded += 1
+
+    async def handle_multi_tool_approval(
+        self,
+        approvals: list[bool],
+        feedbacks: list[str | None],
+    ) -> None:
+        """Receive approval decisions for multiple interrupted tools.
+
+        This method is called by TUI to approve/reject tools.
+
+        Args:
+            approvals: List of approval decisions (one per tool)
+            feedbacks: List of feedback messages (for rejections)
+
+        Raises:
+            ValueError: If lengths don't match
+        """
+        if len(approvals) != len(feedbacks):
+            raise ValueError(
+                f"Length mismatch: {len(approvals)} approvals vs {len(feedbacks)} feedbacks"
+            )
+
+        for i, (approved, feedback) in enumerate(zip(approvals, feedbacks, strict=True)):
+            if approved:
+                self._stats.tool_calls_agreed += 1
+                if i > 0:
+                    self._stats.tool_calls_rejected -= 1  # Already counted
+            else:
+                self._stats.tool_calls_rejected += 1
+
+    async def clear_history(self) -> None:
+        """Clear conversation history."""
+        self._events.clear()
+        self._stats = self._stats.__class__()
+        self._current_run_index = 0
+
+    async def compact(self) -> str:
+        """Compact conversation history to reduce context size."""
+        if len(self._events) <= 1:
+            return "No messages to compact"
+
+        old_count = len(self._events)
+        keep_count = max(1, old_count // 2)
+        self._events = self._events[-keep_count:]
+
+        return (
+            f"Compacted {old_count} events to {keep_count} events, "
+            f"reducing from {old_count} to {keep_count}"
+        )
+
+    def get_log_path(self) -> str | None:
+        """Get the path to the current session's log file."""
+        return None
+
+    def get_current_messages(self) -> list:
+        """Get current conversation messages from agent state."""
+        return []
+
+    @property
+    def session_id(self) -> str:
+        """Get the current session ID."""
+        return self._session_id
+
+    @property
+    def stats(self):
+        """Get current session statistics."""
+        return self._stats

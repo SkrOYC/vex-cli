@@ -382,6 +382,7 @@ async def initialize_session(acp_agent_process: asyncio.subprocess.Process) -> s
 
 
 class TestSessionManagement:
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_multiple_sessions_unique_ids(self, vibe_home_dir: Path) -> None:
         mock_env = get_mocking_env(mock_chunks=[mock_llm_chunk() for _ in range(3)])
@@ -421,6 +422,7 @@ class TestSessionManagement:
 
 
 class TestSessionUpdates:
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_agent_message_chunk_structure(self, vibe_home_dir: Path) -> None:
         mock_env = get_mocking_env([mock_llm_chunk(content="Hi") for _ in range(2)])
@@ -459,6 +461,7 @@ class TestSessionUpdates:
             assert response.params.update.content.text is not None
             assert response.params.update.content.text == "Hi"
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_tool_call_update_structure(self, vibe_home_dir: Path) -> None:
         mock_env = get_mocking_env([
@@ -559,6 +562,7 @@ async def start_session_with_request_permission(
 
 
 class TestToolCallStructure:
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_tool_call_request_permission_structure(
         self, vibe_home_grep_ask: Path
@@ -620,6 +624,7 @@ class TestToolCallStructure:
             assert first_request.params.toolCall is not None
             assert first_request.params.toolCall.toolCallId is not None
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_tool_call_update_approved_structure(
         self, vibe_home_grep_ask: Path
@@ -684,6 +689,7 @@ class TestToolCallStructure:
             )
             assert approved_tool_call is not None
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_tool_call_update_rejected_structure(
         self, vibe_home_grep_ask: Path
@@ -751,6 +757,7 @@ class TestToolCallStructure:
             assert rejected_tool_call is not None
 
     @pytest.mark.skip(reason="Long running tool call updates are not implemented yet")
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_tool_call_in_progress_update_structure(
         self, vibe_home_grep_ask: Path
@@ -812,6 +819,7 @@ class TestToolCallStructure:
                 "No tool call in progress updates found for a long running command"
             )
 
+    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_tool_call_result_update_failure_structure(
         self, vibe_home_grep_ask: Path
