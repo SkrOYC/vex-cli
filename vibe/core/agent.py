@@ -752,7 +752,9 @@ class Agent:
                 feedback=f"Tool '{tool_name}' is permanently disabled",
             )
 
-        return await self._ask_approval(tool_name, args, tool_call_id)
+        return ToolDecision(
+            verdict=ToolExecutionResponse.SKIP, feedback="Tool execution not permitted."
+        )
 
     def _clean_message_history(self) -> None:
         ACCEPTABLE_HISTORY_SIZE = 2
