@@ -474,8 +474,23 @@ class VibeApp(App):
         # Extract action request from interrupt data
         data = interrupt_data.get("data", {})
 
+        # Validate interrupt data structure
+        if "action_requests" not in data:
+            logger.warning(
+                f"Interrupt data missing 'action_requests': {data}"
+            )
+            return {"approved": False, "error": "Invalid interrupt format"}
+
         # HumanInTheLoopMiddleware always provides action_requests
         action_requests = data.get("action_requests", [])
+
+        # Validate action_requests is a list
+        if not isinstance(action_requests, list):
+            logger.warning(
+                f"action_requests must be a list, got {type(action_requests)}"
+            )
+            return {"approved": False, "error": "Invalid interrupt format"}
+
         await self._handle_multi_tool_approval(action_requests)
 
         return {"approved": True}

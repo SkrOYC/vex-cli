@@ -37,9 +37,16 @@ class BaseSnapshotTestApp(VibeApp):
 
         # VibeLangChainEngine is used instead of legacy Agent
         from vibe.core.engine import VibeLangChainEngine
-        engine = VibeLangChainEngine(config=config)
-        engine.initialize()
-        self.agent = engine
+
+        try:
+            engine = VibeLangChainEngine(config=config)
+            engine.initialize()
+            self.agent = engine
+        except Exception as e:
+            # Fail fast with clear error if initialization fails
+            raise AssertionError(
+                f"Failed to initialize VibeLangChainEngine for snapshot testing: {e}"
+            ) from e
 
     async def on_mount(self) -> None:
         await super().on_mount()
