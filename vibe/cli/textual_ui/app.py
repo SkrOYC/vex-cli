@@ -464,7 +464,7 @@ class VibeApp(App):
     ) -> dict[str, Any]:
         """Handle approval decision from ApprovalBridge callback."""
         # Show approval dialog and get user decision
-        decision = await self._switch_to_approval_app_from_action(action_request)
+        decision = await self._switch_to_approval_app_from_action([action_request])
         return decision
 
     async def _handle_engine_interrupt(
@@ -473,19 +473,85 @@ class VibeApp(App):
         """Handle interrupt from VibeEngine requiring approval."""
         # Extract action request from interrupt data
         data = interrupt_data.get("data", {})
-        action_request = data.get("action_request")
-        if not action_request:
-            # Fallback
-            action_request = {
-                "name": interrupt_data.get("name", ""),
-                "args": interrupt_data.get("args", {}),
-                "description": interrupt_data.get("description", ""),
-            }
 
-        # For DeepAgents with ApprovalBridge, the callback is handled automatically
-        # This method is called by EventHandler, but ApprovalBridge handles the flow
-        # We just need to return a placeholder since the real work happens in the callback
+        # Check for HITLRequest format (multiple tools)
+        if "action_requests" in data:
+            action_requests = data["action_requests"]
+            await self._handle_multi_tool_approval(action_requests)
+        else:
+            # Single tool fallback (legacy format)
+            action_request = data.get("action_request")
+            if not action_request:
+                # Fallback
+                action_request = {
+                    "name": interrupt_data.get("name", ""),
+                    "args": interrupt_data.get("args", {}),
+                    "description": interrupt_data.get("description", ""),
+                }
+            await self._handle_multi_tool_approval([action_request])
+
         return {"approved": True}
+
+    async def _handle_multi_tool_approval(
+        self, action_requests: list[dict[str, Any]]
+    ) -> None:
+        """Handle approval for multiple tools in sequence.
+
+        Args:
+            action_requests: List of tool requests requiring approval
+        """
+        decisions = []
+        current_index = 0
+
+        while current_index < len(action_requests):
+            # Show approval dialog for current tool
+            approval_result = await self._switch_to_approval_app_from_action(
+                action_requests, current_index
+            )
+
+            # Extract decision
+            approved = approval_result["approved"]
+            feedback = approval_result.get("feedback")
+            always_approve = approval_result.get("always_approve", False)
+
+            # Handle "always approve" by updating config
+            if always_approve:
+                tool_name = action_requests[current_index]["name"]
+                self._set_tool_permission_always(tool_name, save_permanently=False)
+
+            # Build HITL decision
+            if approved:
+                decisions.append({"type": "approve"})
+            else:
+                decisions.append({"type": "reject", "message": feedback})
+
+            # Check for batch shortcuts
+            if approval_result.get("batch_approve"):
+                # Approve all remaining tools
+                remaining = len(action_requests) - current_index - 1
+                for _ in range(remaining):
+                    decisions.append({"type": "approve"})
+                break
+
+            if approval_result.get("batch_reject"):
+                # Reject all remaining tools
+                remaining = len(action_requests) - current_index - 1
+                for _ in range(remaining):
+                    decisions.append({"type": "reject", "message": feedback})
+                break
+
+            # Move to next tool or continue
+            next_index = approval_result.get("next_tool")
+            if next_index is not None:
+                current_index = next_index
+            else:
+                break
+
+        # Submit all decisions to engine
+        if self.agent:
+            approvals = [d["type"] == "approve" for d in decisions]
+            feedbacks = [d.get("message") for d in decisions]
+            await self.agent.handle_multi_tool_approval(approvals, feedbacks)
 
     async def _handle_agent_turn(self, prompt: str) -> None:
         if not self.agent:
@@ -800,9 +866,19 @@ class VibeApp(App):
         self.call_after_refresh(config_app.focus)
 
     async def _switch_to_approval_app_from_action(
-        self, action_request: dict[str, Any]
+        self,
+        action_requests: list[dict[str, Any]],
+        current_index: int = 0,
     ) -> dict[str, Any]:
-        """Switch to approval app for DeepAgents action request and return decision."""
+        """Switch to approval app for specific tool in multi-tool flow.
+
+        Args:
+            action_requests: List of tool requests requiring approval
+            current_index: Index of the current tool to show
+
+        Returns:
+            Approval result dict with decision metadata
+        """
         bottom_container = self.query_one("#bottom-app-container")
 
         try:
@@ -818,9 +894,10 @@ class VibeApp(App):
         self._pending_approval = asyncio.Future()
 
         approval_app = ApprovalApp(
-            action_request=action_request,
+            action_requests=action_requests,
             workdir=str(self.config.effective_workdir),
             config=self.config,
+            current_index=current_index,
         )
         await bottom_container.mount(approval_app)
         self._current_bottom_app = BottomApp.Approval
@@ -838,8 +915,21 @@ class VibeApp(App):
                 "always_approve": False,
                 "feedback": "Approval timeout",
             }
+        finally:
+            if approval_app and approval_app.parent:
+                await approval_app.remove()
+            self._pending_approval = None
 
-    async def _switch_to_approval_app(self, tool_name: str, tool_args: dict) -> None:
+    async def _switch_to_approval_app(
+        self, tool_name: str, tool_args: dict, current_index: int = 0
+    ) -> None:
+        """Switch to approval app for legacy single-tool mode.
+
+        Args:
+            tool_name: Name of the tool
+            tool_args: Arguments for the tool
+            current_index: Index for multi-tool tracking (default 0)
+        """
         bottom_container = self.query_one("#bottom-app-container")
 
         try:
@@ -859,9 +949,10 @@ class VibeApp(App):
         }
 
         approval_app = ApprovalApp(
-            action_request=action_request,
+            action_requests=[action_request],
             workdir=str(self.config.effective_workdir),
             config=self.config,
+            current_index=current_index,
         )
         await bottom_container.mount(approval_app)
         self._current_bottom_app = BottomApp.Approval
