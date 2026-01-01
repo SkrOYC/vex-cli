@@ -64,7 +64,6 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
 
 class TestACPSetModel:
     @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
-    @pytest.mark.skip(reason="ACP tests left aside for now - tracked separately")
     @pytest.mark.asyncio
     async def test_set_model_success(self, acp_agent: VibeAcpAgent) -> None:
         session_response = await acp_agent.newSession(
