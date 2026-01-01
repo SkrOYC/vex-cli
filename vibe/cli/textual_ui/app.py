@@ -474,21 +474,9 @@ class VibeApp(App):
         # Extract action request from interrupt data
         data = interrupt_data.get("data", {})
 
-        # Check for HITLRequest format (multiple tools)
-        if "action_requests" in data:
-            action_requests = data["action_requests"]
-            await self._handle_multi_tool_approval(action_requests)
-        else:
-            # Single tool fallback (legacy format)
-            action_request = data.get("action_request")
-            if not action_request:
-                # Fallback
-                action_request = {
-                    "name": interrupt_data.get("name", ""),
-                    "args": interrupt_data.get("args", {}),
-                    "description": interrupt_data.get("description", ""),
-                }
-            await self._handle_multi_tool_approval([action_request])
+        # HumanInTheLoopMiddleware always provides action_requests
+        action_requests = data["action_requests"]
+        await self._handle_multi_tool_approval(action_requests)
 
         return {"approved": True}
 
@@ -805,7 +793,6 @@ class VibeApp(App):
             return
 
         # Check if there's enough history to compact
-        # For VibeLangChainEngine, we check via stats, for legacy agent via messages
         has_history = self.agent.stats.steps > 0
 
         if not has_history:
@@ -919,46 +906,6 @@ class VibeApp(App):
             if approval_app and approval_app.parent:
                 await approval_app.remove()
             self._pending_approval = None
-
-    async def _switch_to_approval_app(
-        self, tool_name: str, tool_args: dict, current_index: int = 0
-    ) -> None:
-        """Switch to approval app for legacy single-tool mode.
-
-        Args:
-            tool_name: Name of the tool
-            tool_args: Arguments for the tool
-            current_index: Index for multi-tool tracking (default 0)
-        """
-        bottom_container = self.query_one("#bottom-app-container")
-
-        try:
-            chat_input_container = self.query_one(ChatInputContainer)
-            await chat_input_container.remove()
-        except Exception:
-            pass
-
-        if self._mode_indicator:
-            self._mode_indicator.display = False
-
-        # For legacy compatibility, create action_request from tool_name/tool_args
-        action_request = {
-            "name": tool_name,
-            "args": tool_args,
-            "description": f"Execute {tool_name} tool",
-        }
-
-        approval_app = ApprovalApp(
-            action_requests=[action_request],
-            workdir=str(self.config.effective_workdir),
-            config=self.config,
-            current_index=current_index,
-        )
-        await bottom_container.mount(approval_app)
-        self._current_bottom_app = BottomApp.Approval
-
-        self.call_after_refresh(approval_app.focus)
-        self.call_after_refresh(self._scroll_to_bottom)
 
     async def _switch_to_input_app(self) -> None:
         bottom_container = self.query_one("#bottom-app-container")
