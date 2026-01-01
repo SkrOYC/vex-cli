@@ -127,3 +127,11 @@ def langchain_config(monkeypatch: pytest.MonkeyPatch) -> VibeConfig:
 def vibe_engine(langchain_config: VibeConfig) -> VibeEngine:
     """Create VibeEngine for testing."""
     return VibeEngine(langchain_config)
+
+
+@pytest.fixture
+def fake_interrupted_agent():
+    """Create a fake agent with interrupt support."""
+    from tests.stubs.fake_backend import FakeInterruptedAgent
+
+    return FakeInterruptedAgent()
