@@ -475,7 +475,7 @@ class VibeApp(App):
         data = interrupt_data.get("data", {})
 
         # HumanInTheLoopMiddleware always provides action_requests
-        action_requests = data["action_requests"]
+        action_requests = data.get("action_requests", [])
         await self._handle_multi_tool_approval(action_requests)
 
         return {"approved": True}
