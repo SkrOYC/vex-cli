@@ -31,7 +31,6 @@ class StubAgent(Agent):
     def __init__(self) -> None:
         self.messages: list = []
         self.stats = SimpleNamespace(context_tokens=0)
-        self.approval_callback = None
 
     async def initialize(self) -> None:
         return

@@ -25,9 +25,8 @@ from vibe.core.engine.tools import VibeToolAdapter
 class VibeEngine:
     """Thin wrapper around DeepAgents for TUI integration."""
 
-    def __init__(self, config: VibeConfig, approval_callback=None):
+    def __init__(self, config: VibeConfig):
         self.config = config
-        self.approval_callback = approval_callback
         self.approval_bridge: ApprovalBridge | None = None  # ADAPTER
         self.event_translator = EventTranslator(config)     # ADAPTER
         # ...
@@ -99,10 +98,8 @@ class VibeLangChainEngine:
     def __init__(
         self,
         config: VibeConfig,
-        approval_callback: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
     ) -> None:
         self.config = config
-        self.approval_callback = approval_callback
         self._agent: CompiledStateGraph | None = None
         self._checkpointer = InMemorySaver()
         self._thread_id = "vibe-session"
@@ -279,7 +276,6 @@ class VibeApp(App):
         self.config = config
         self.engine = VibeLangChainEngine(  # Changed class name only
             config=config,
-            approval_callback=self._create_approval_callback(),
         )
 
     async def on_user_message(self, message: str) -> None:
@@ -306,7 +302,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 
 class VibeEngine:
-    def __init__(self, config, approval_callback=None):
+    def __init__(self, config):
         self.approval_bridge = ApprovalBridge(...)  # Adapter
         self.event_translator = EventTranslator(config)  # Adapter
         # ...
@@ -327,7 +323,7 @@ from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 
 class VibeLangChainEngine:
-    def __init__(self, config, approval_callback=None):
+    def __init__(self, config):
         # No adapters needed!
         # ...
 

@@ -5,7 +5,7 @@ from collections import OrderedDict
 from collections.abc import AsyncGenerator, Callable
 from enum import StrEnum, auto
 import time
-from typing import Any, Never, cast
+from typing import Any, Never
 from uuid import uuid4
 
 # The legacy backend factory has been removed as part of DeepAgents migration
@@ -62,17 +62,13 @@ from vibe.core.tools.base import (
 from vibe.core.tools.manager import ToolManager
 from vibe.core.types import (
     AgentStats,
-    ApprovalCallback,
-    ApprovalResponse,
     AssistantEvent,
-    AsyncApprovalCallback,
     BaseEvent,
     CompactEndEvent,
     CompactStartEvent,
     LLMChunk,
     LLMMessage,
     Role,
-    SyncApprovalCallback,
     ToolCall,
     ToolCallEvent,
     ToolResultEvent,
@@ -151,7 +147,6 @@ class Agent:
             pass
 
         self.auto_approve = auto_approve
-        self.approval_callback: ApprovalCallback | None = None
 
         self.session_id = str(uuid4())
 
@@ -757,32 +752,9 @@ class Agent:
                 feedback=f"Tool '{tool_name}' is permanently disabled",
             )
 
-        return await self._ask_approval(tool_name, args, tool_call_id)
-
-    async def _ask_approval(
-        self, tool_name: str, args: dict[str, Any], tool_call_id: str
-    ) -> ToolDecision:
-        if not self.approval_callback:
-            return ToolDecision(
-                verdict=ToolExecutionResponse.SKIP,
-                feedback="Tool execution not permitted.",
-            )
-        if asyncio.iscoroutinefunction(self.approval_callback):
-            async_callback = cast(AsyncApprovalCallback, self.approval_callback)
-            response, feedback = await async_callback(tool_name, args, tool_call_id)
-        else:
-            sync_callback = cast(SyncApprovalCallback, self.approval_callback)
-            response, feedback = sync_callback(tool_name, args, tool_call_id)
-
-        match response:
-            case ApprovalResponse.YES:
-                return ToolDecision(
-                    verdict=ToolExecutionResponse.EXECUTE, feedback=feedback
-                )
-            case ApprovalResponse.NO:
-                return ToolDecision(
-                    verdict=ToolExecutionResponse.SKIP, feedback=feedback
-                )
+        return ToolDecision(
+            verdict=ToolExecutionResponse.SKIP, feedback="Tool execution not permitted."
+        )
 
     def _clean_message_history(self) -> None:
         ACCEPTABLE_HISTORY_SIZE = 2
@@ -846,9 +818,6 @@ class Agent:
     def _reset_session(self) -> None:
         self.session_id = str(uuid4())
         self.interaction_logger.reset_session(self.session_id)
-
-    def set_approval_callback(self, callback: ApprovalCallback) -> None:
-        self.approval_callback = callback
 
     async def clear_history(self) -> None:
         await self.interaction_logger.save_interaction(

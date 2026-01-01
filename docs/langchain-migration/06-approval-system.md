@@ -12,9 +12,8 @@ Replace the `ApprovalBridge` adapter with native LangChain 1.2.0 `HumanInTheLoop
 class ApprovalBridge:
     """Bridge LangGraph interrupts to Vibe TUI approval flow."""
     
-    def __init__(self, config, approval_callback=None):
+    def __init__(self, config):
         self.config = config
-        self.approval_callback = approval_callback
         self._pending_approvals: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._session_auto_approve: set[str] = set()
     

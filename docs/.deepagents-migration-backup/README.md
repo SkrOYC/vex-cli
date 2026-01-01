@@ -128,6 +128,37 @@ This document outlines a comprehensive plan to migrate Mistral Vibe from its cus
 - **[09-tui-integration.md](09-tui-integration.md)** - Textual UI connection
 - **[10-testing.md](10-testing.md)** - Test strategy and validation
 
+## Archived Patterns
+
+### Approval Callback Pattern (REMOVED)
+
+The `approval_callback` parameter was used by DeepAgents for external approval handling in the legacy Agent class. This pattern has been **completely removed** in favor of native LangChain 1.2.0 `HumanInTheLoopMiddleware`.
+
+**Removed Components:**
+- `approval_callback` parameter in `Agent.__init__()`
+- `ApprovalCallback`, `AsyncApprovalCallback`, `SyncApprovalCallback` type definitions
+- `ApprovalResponse` enum class
+- `_ask_approval()` method
+- `set_approval_callback()` method
+
+**Migration Path:**
+
+The approval callback pattern was replaced by:
+- Direct calls to `engine.handle_approval()`, `engine.handle_multi_tool_approval()`
+- `Command(resume=HITLResponse(decisions=[...]))` pattern
+- Native interrupt/resume flow via LangGraph
+
+```python
+# BEFORE (DeepAgents):
+agent = Agent(config=config, approval_callback=my_callback)
+
+# AFTER (LangChain 1.2.0):
+engine = VibeLangChainEngine(config=config)
+await engine.handle_approval(approved=True)
+```
+
+**Note:** This pattern was never user-facing and was only used internally. All references have been removed from production code, tests, and documentation.
+
 ## Next Steps
 
 1. **Review & Approval**: Review this plan with stakeholders

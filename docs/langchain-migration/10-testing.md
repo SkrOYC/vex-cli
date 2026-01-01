@@ -90,7 +90,6 @@ async def test_approval_workflow():
     
     engine = VibeLangChainEngine(
         config=config,
-        approval_callback=lambda req: approval_future,
     )
     
     # Run with approval-requiring tool
