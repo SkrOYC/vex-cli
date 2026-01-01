@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Callable, Iterable
 
+from langchain.agents.middleware.human_in_the_loop import HITLRequest, HITLResponse
+from langgraph.types import Command
+
 from tests.mock.utils import mock_llm_chunk
 from vibe.core.types import LLMChunk, LLMMessage
 
@@ -113,3 +116,91 @@ class FakeBackend:
     ) -> int:
         self._count_tokens_calls.append(list(messages))
         return self._token_counter(messages)
+
+
+class FakeInterruptedAgent:
+    """Mock agent that simulates HITL interrupts.
+
+    Usage:
+        agent = FakeInterruptedAgent()
+        agent.add_interrupt(
+            tool_name="bash",
+            args={"command": "ls"},
+            description="Execute bash command"
+        )
+
+        # Run - will hit interrupt
+        # Get interrupt data
+        hitl_request = agent.get_interrupt()
+
+        # Resume with decision
+        agent.resume(HITLResponse(decisions=[{"type": "approve"}]))
+    """
+
+    def __init__(self) -> None:
+        self._interrupts: list[HITLRequest] = []
+        self._current_interrupt_index = 0
+        self._decisions_received: list[HITLResponse] = []
+        self._ainvoke_call_count = 0
+
+    def add_interrupt(
+        self,
+        tool_name: str,
+        args: dict,
+        description: str,
+        allowed_decisions: list[str] | None = None,
+    ) -> None:
+        """Add a tool interrupt to the sequence."""
+        if allowed_decisions is None:
+            allowed_decisions = ["approve", "reject"]
+
+        hitl_request = HITLRequest(
+            action_requests=[
+                {
+                    "name": tool_name,
+                    "args": args,
+                    "description": description,
+                }
+            ],
+            review_configs=[
+                {
+                    "action_name": tool_name,
+                    "allowed_decisions": allowed_decisions,
+                }
+            ],
+        )
+        self._interrupts.append(hitl_request)
+
+    def get_interrupt(self) -> HITLRequest | None:
+        """Get the next interrupt in the sequence."""
+        if self._current_interrupt_index < len(self._interrupts):
+            interrupt = self._interrupts[self._current_interrupt_index]
+            self._current_interrupt_index += 1
+            return interrupt
+        return None
+
+    def resume(self, decision: HITLResponse) -> None:
+        """Receive a decision for the current interrupt."""
+        self._decisions_received.append(decision)
+
+    def get_decisions(self) -> list[HITLResponse]:
+        """Get all decisions received so far."""
+        return self._decisions_received
+
+    def get_ainvoke_call_count(self) -> int:
+        """Get number of times ainvoke was called (for testing)."""
+        return self._ainvoke_call_count
+
+    async def ainvoke(self, command: Command, config: dict | None = None) -> None:
+        """Mock ainvoke method to accept Command with HITLResponse.
+
+        Args:
+            command: Command object containing HITLResponse in resume field
+            config: Configuration dict (unused in mock)
+        """
+        self._ainvoke_call_count += 1
+
+        # Extract HITLResponse from command.resume
+        if hasattr(command, "resume") and isinstance(command.resume, dict):
+            hitl_response = HITLResponse(**command.resume)
+            self._decisions_received.append(hitl_response)
