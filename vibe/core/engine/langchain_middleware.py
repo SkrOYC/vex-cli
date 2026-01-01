@@ -5,8 +5,7 @@ This module provides custom middleware implementations for the Vibe agent:
 - PriceLimitMiddleware: Stops execution when price limit is exceeded
 - LoggerMiddleware: Provides deep observability into agent execution cycles
 
-These middleware classes are designed to work natively with LangChain 1.2.0
-without any DeepAgents dependencies.
+These middleware classes are implemented natively with LangChain 1.2.0.
 """
 
 from __future__ import annotations

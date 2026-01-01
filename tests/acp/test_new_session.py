@@ -1,16 +1,17 @@
+"""ACP new session tests with VibeLangChainEngine."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
 
-from acp import AgentSideConnection, NewSessionRequest, SetSessionModelRequest
+from acp import AgentSideConnection, NewSessionRequest
 import pytest
 
 from tests.stubs.fake_backend import FakeBackend
 from tests.stubs.fake_connection import FakeAgentSideConnection
 from vibe.acp.acp_agent import VibeAcpAgent
 from vibe.acp.utils import VibeSessionMode
-from vibe.core.agent import Agent
 from vibe.core.config import ModelConfig, VibeConfig
 from vibe.core.types import LLMChunk, LLMMessage, LLMUsage, Role
 
@@ -43,13 +44,6 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
         ],
     )
 
-    class PatchedAgent(Agent):
-        def __init__(self, *args, **kwargs) -> None:
-            super().__init__(*args, **{**kwargs, "backend": backend})
-            self.config = config
-
-    patch("vibe.acp.acp_agent.VibeAgent", side_effect=PatchedAgent).start()
-
     vibe_acp_agent: VibeAcpAgent | None = None
 
     def _create_agent(connection: AgentSideConnection) -> VibeAcpAgent:
@@ -58,7 +52,7 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
         return vibe_acp_agent
 
     FakeAgentSideConnection(_create_agent)
-    return vibe_acp_agent  # pyright: ignore[reportReturnType]
+    return vibe_acp_agent
 
 
 class TestACPNewSession:
@@ -128,7 +122,7 @@ class TestACPNewSession:
         assert session_response.models.currentModelId == "devstral-latest"
 
         response = await acp_agent.setSessionModel(
-            SetSessionModelRequest(sessionId=session_id, modelId="devstral-small")
+            session_id=session_id, modelId="devstral-small"
         )
         assert response is not None
 

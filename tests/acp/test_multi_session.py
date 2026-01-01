@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 from uuid import uuid4
 
 from acp import (
@@ -21,7 +20,6 @@ from tests.mock.utils import mock_llm_chunk
 from tests.stubs.fake_backend import FakeBackend
 from tests.stubs.fake_connection import FakeAgentSideConnection
 from vibe.acp.acp_agent import VibeAcpAgent
-from vibe.core.agent import Agent
 from vibe.core.config import ModelConfig, VibeConfig
 from vibe.core.types import Role
 
@@ -42,14 +40,6 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
             )
         ],
     )
-
-    class PatchedAgent(Agent):
-        def __init__(self, *args, **kwargs) -> None:
-            super().__init__(*args, **kwargs)
-            self.backend = backend
-            self.config = config
-
-    patch("vibe.acp.acp_agent.VibeAgent", side_effect=PatchedAgent).start()
 
     vibe_acp_agent: VibeAcpAgent | None = None
 

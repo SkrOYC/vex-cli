@@ -9,7 +9,6 @@ import pytest
 from tests.stubs.fake_backend import FakeBackend
 from tests.stubs.fake_connection import FakeAgentSideConnection
 from vibe.acp.acp_agent import VibeAcpAgent
-from vibe.core.agent import Agent
 from vibe.core.config import ModelConfig, VibeConfig
 from vibe.core.types import LLMChunk, LLMMessage, LLMUsage, Role
 
@@ -51,19 +50,6 @@ def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
     )
 
     VibeConfig.dump_config(config.model_dump(exclude_none=True))
-
-    class PatchedAgent(Agent):
-        def __init__(self, *args, **kwargs) -> None:
-            super().__init__(*args, **{**kwargs, "backend": backend})
-            self.config = config
-            try:
-                active_model = config.get_active_model()
-                self.stats.input_price_per_million = active_model.input_price
-                self.stats.output_price_per_million = active_model.output_price
-            except ValueError:
-                pass
-
-    patch("vibe.acp.acp_agent.VibeAgent", side_effect=PatchedAgent).start()
 
     vibe_acp_agent: VibeAcpAgent | None = None
 

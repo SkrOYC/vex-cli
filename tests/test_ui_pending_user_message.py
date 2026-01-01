@@ -10,7 +10,7 @@ import pytest
 from vibe.cli.textual_ui.app import VibeApp
 from vibe.cli.textual_ui.widgets.chat_input.container import ChatInputContainer
 from vibe.cli.textual_ui.widgets.messages import InterruptMessage, UserMessage
-from vibe.core.agent import Agent
+from vibe.core.engine import VibeLangChainEngine
 from vibe.core.config import SessionLoggingConfig, VibeConfig
 from vibe.core.types import BaseEvent
 
@@ -27,7 +27,7 @@ async def _wait_for(
     return None
 
 
-class StubAgent(Agent):
+class StubAgent:
     def __init__(self) -> None:
         self.messages: list = []
         self.stats = SimpleNamespace(context_tokens=0)

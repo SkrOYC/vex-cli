@@ -4,8 +4,7 @@ This module provides the TUIEventMapper class that translates native LangGraph
 events from VibeLangChainEngine's astream_events() output to Vibe TUI event
 types that EventHandler expects.
 
-This is part of the migration from DeepAgents to native LangChain 1.2.0,
-replacing the EventTranslator adapter layer.
+This replaces the EventTranslator adapter layer from LangChain 1.2.0 migration.
 """
 
 from __future__ import annotations

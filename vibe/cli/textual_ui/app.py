@@ -462,7 +462,7 @@ class VibeApp(App):
     async def _handle_approval_decision(
         self, action_request: dict[str, Any]
     ) -> dict[str, Any]:
-        """Handle approval decision from ApprovalBridge callback."""
+        """Handle approval decision from TUI approval dialog."""
         # Show approval dialog and get user decision
         decision = await self._switch_to_approval_app_from_action([action_request])
         return decision

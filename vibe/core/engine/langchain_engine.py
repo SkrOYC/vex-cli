@@ -176,7 +176,8 @@ class VibeLangChainEngine:
         model = self._create_model()
         tools = VibeToolAdapter.get_all_tools(self.config)
 
-        # LangChain 1.2.0 create_agent() - NO DeepAgents!
+        # LangChain 1.2.0 create_agent() with native middleware stack
+
         self._agent = create_agent(
             model=model,
             tools=tools,

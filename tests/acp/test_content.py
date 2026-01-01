@@ -15,7 +15,6 @@ import pytest
 from tests.stubs.fake_backend import FakeBackend
 from tests.stubs.fake_connection import FakeAgentSideConnection
 from vibe.acp.acp_agent import VibeAcpAgent
-from vibe.core.agent import Agent
 from vibe.core.types import LLMChunk, LLMMessage, LLMUsage, Role
 
 
@@ -35,12 +34,6 @@ def backend() -> FakeBackend:
 
 @pytest.fixture
 def acp_agent(backend: FakeBackend) -> VibeAcpAgent:
-    class PatchedAgent(Agent):
-        def __init__(self, *args, **kwargs) -> None:
-            super().__init__(*args, **kwargs, backend=backend)
-
-    patch("vibe.acp.acp_agent.VibeAgent", side_effect=PatchedAgent).start()
-
     vibe_acp_agent: VibeAcpAgent | None = None
 
     def _create_agent(connection: AgentSideConnection) -> VibeAcpAgent:
