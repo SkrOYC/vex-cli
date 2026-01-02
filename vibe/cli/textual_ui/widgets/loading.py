@@ -7,6 +7,7 @@ from typing import ClassVar
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
+from textual.timer import Timer
 from textual.widgets import Static
 
 
@@ -58,6 +59,7 @@ class LoadingWidget(Static):
         self.ellipsis_widget: Static | None = None
         self.hint_widget: Static | None = None
         self.start_time: float | None = None
+        self._animation_timer: Timer | None = None
 
     def _get_easter_egg(self) -> str | None:
         EASTER_EGG_PROBABILITY = 0.10
@@ -125,7 +127,7 @@ class LoadingWidget(Static):
     def on_mount(self) -> None:
         self.start_time = time()
         self.update_animation()
-        self.set_interval(0.1, self.update_animation)
+        self._animation_timer = self.set_interval(0.1, self.update_animation)
 
     def _get_gradient_color(self, position: int) -> str:
         color_index = (position - self.gradient_offset) % len(self.TARGET_COLORS)
@@ -155,3 +157,13 @@ class LoadingWidget(Static):
         if self.hint_widget and self.start_time is not None:
             elapsed = int(time() - self.start_time)
             self.hint_widget.update(f"({elapsed}s esc to interrupt)")
+
+    def on_unmount(self) -> None:
+        """Stop animation timer when widget is removed.
+
+        This prevents memory leaks by ensuring the timer doesn't continue
+        firing after the widget is no longer needed.
+        """
+        if self._animation_timer:
+            self._animation_timer.stop()
+            self._animation_timer = None

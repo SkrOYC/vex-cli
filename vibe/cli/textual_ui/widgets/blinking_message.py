@@ -65,3 +65,13 @@ class BlinkingMessage(Static):
         self.blink_state = True
         self.success = success
         self.update_display()
+
+    def on_unmount(self) -> None:
+        """Stop blinking timer when widget is removed.
+
+        This prevents memory leaks by ensuring the timer doesn't continue
+        firing after the widget is no longer needed.
+        """
+        if self._blink_timer:
+            self._blink_timer.stop()
+            self._blink_timer = None
