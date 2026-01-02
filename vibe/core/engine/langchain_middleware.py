@@ -58,6 +58,7 @@ class ContextWarningMiddleware(AgentMiddleware):
         self.threshold_percent = threshold_percent
         self.max_context = max_context
         self._warned = False
+        self._cumulative_tokens = 0
 
     def before_model(
         self, state: AgentState, runtime: Runtime
@@ -85,29 +86,26 @@ class ContextWarningMiddleware(AgentMiddleware):
         return None
 
     def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
-        """No action needed after model call."""
+        """Update cumulative token count after model call."""
+        messages = state.get("messages", [])
+        if messages and isinstance(messages[-1], AIMessage):
+            last_msg = messages[-1]
+            if last_msg.usage_metadata:
+                self._cumulative_tokens += last_msg.usage_metadata.get(
+                    "total_tokens", 0
+                )
         return None
 
     def _get_current_token_count(self, state: AgentState) -> int:
-        """Get current token count from usage metadata or estimate from messages.
+        """Get current token count from cumulative tracking.
 
         Args:
             state: Current agent state containing messages
 
         Returns:
-            Token count from usage_metadata or estimated count
+            Cumulative token count from all model responses
         """
-        # Check if we have usage metadata from previous AI responses
-        messages = state.get("messages", [])
-        for msg in reversed(messages):
-            # Only AIMessage has usage_metadata
-            if isinstance(msg, AIMessage) and msg.usage_metadata:
-                total_tokens = msg.usage_metadata.get("total_tokens", 0)
-                if total_tokens > 0:
-                    return total_tokens
-
-        # Fall back to estimation if no usage metadata available
-        return self._estimate_tokens(messages)
+        return self._cumulative_tokens
 
     def _estimate_tokens(self, messages: list) -> int:
         """Rough token estimation: ~4 characters per token.
