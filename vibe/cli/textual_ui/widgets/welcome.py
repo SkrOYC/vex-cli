@@ -164,22 +164,22 @@ class WelcomeBanner(Static):
             # Not a theme variable, return as-is
             return theme_var
 
-        # Define fallback colors for theme variables based on typical Textual theme values
+        try:
+            # Attempt to resolve the color from the app's theme.
+            # The `get_css_variables` dictionary has keys without the '$'.
+            color = self.app.get_css_variables().get(theme_var[1:])
+            if isinstance(color, Color):
+                return color.hex
+        except Exception:
+            # Fallback to the hardcoded map if resolution fails, e.g., during tests or early init.
+            pass
+
+        # Define fallback colors for theme variables used in this widget
         theme_fallbacks: dict[str, str] = {
             "$warning": "#FFD700",  # Amber/Gold
             "$error": "#E10500",  # Red
-            "$success": "#00A800",  # Green
-            "$primary": "#0178D4",  # Blue
-            "$secondary": "#FFAF00",  # Amber
-            "$accent": "#FF8200",  # Orange
             "$foreground": "#FFFFFF",  # White (typically)
-            "$background": "#1E1E1E",  # Dark gray (typically)
             "$surface": "#2D2D2D",  # Surface color (typically)
-            "$text": "#FFFFFF",  # Text color (typically)
-            "$text-muted": "#888888",  # Muted text
-            "$text-warning": "#FFD700",  # Warning text
-            "$text-error": "#E10500",  # Error text
-            "$text-success": "#00A800",  # Success text
         }
 
         return theme_fallbacks.get(theme_var, theme_var)
