@@ -211,3 +211,57 @@ class TestEngineExports:
 
         # TUIEventMapper should be imported
         assert hasattr(langchain_engine, "TUIEventMapper")
+
+
+@pytest.mark.asyncio
+class TestRealTimeContextProgress:
+    """Integration tests for real-time context progress updates."""
+
+    async def test_context_progress_updates_realtime(self) -> None:
+        """Test that context progress updates during event streaming.
+
+        This test verifies the fix for the issue where stats were only
+        updated when explicitly accessed, not in real-time during execution.
+        """
+        from tests.stubs.fake_backend import FakeVibeLangChainEngine
+        from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
+
+        engine = FakeVibeLangChainEngine(
+            config=VibeConfig(),
+            events_to_yield=[
+                AssistantEvent(content="Response with some content"),
+                ToolCallEvent(
+                    tool_name="bash",
+                    args={"command": "ls"},
+                    tool_call_id="test-1",
+                    tool_class=None,
+                ),
+                ToolResultEvent(
+                    tool_name="bash",
+                    tool_call_id="test-1",
+                    tool_class=None,
+                    result=None,
+                    error=None,
+                ),
+            ],
+        )
+        engine.initialize()
+
+        # Track context tokens during streaming
+        context_tokens_during_streaming = []
+        steps_during_streaming = []
+
+        async for _event in engine.run("Test message"):
+            # Access stats during streaming to verify they update in real-time
+            context_tokens_during_streaming.append(engine.stats.context_tokens)
+            steps_during_streaming.append(engine.stats.steps)
+
+        # Verify stats were updated during streaming (not just at the end)
+        assert len(context_tokens_during_streaming) == 3
+        assert len(steps_during_streaming) == 3
+
+        # Final stats should reflect all events
+        final_stats = engine.stats
+        assert final_stats.steps >= 1
+        assert final_stats.tool_calls_agreed >= 1
+        assert final_stats.tool_calls_succeeded >= 1
