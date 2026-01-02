@@ -152,6 +152,12 @@ def build_interrupt_config(config: VibeConfig) -> dict[str, Any]:
     """Build interrupt config from Vibe tool permissions with pattern support."""
     interrupt_on = {}
 
+    # First, add default dangerous tools to ensure they always interrupt
+    dangerous_tools = ["create", "edit", "edit_file", "bash", "execute"]
+    for tool in dangerous_tools:
+        interrupt_on[tool] = True
+
+    # Then process explicitly configured tools
     for tool_name, tool_config in config.tools.items():
         # Get effective permission (considering patterns)
         # For interrupt config, we use the base permission since patterns are checked at runtime
@@ -159,19 +165,13 @@ def build_interrupt_config(config: VibeConfig) -> dict[str, Any]:
 
         match permission:
             case ToolPermission.ALWAYS:
-                # No interrupt needed
-                pass
+                # No interrupt needed - remove from dangerous tools list if present
+                interrupt_on.pop(tool_name, None)
             case ToolPermission.ASK:
                 # Interrupt before execution
                 interrupt_on[tool_name] = True
             case ToolPermission.NEVER:
-                # Tool filtered out (not added to agent)
-                pass
-
-    # Add defaults for dangerous tools
-    dangerous_tools = ["create", "edit", "edit_file", "bash", "execute"]
-    for tool in dangerous_tools:
-        if tool not in interrupt_on:
-            interrupt_on[tool] = True
+                # Tool filtered out (not added to agent) - remove from interrupt config
+                interrupt_on.pop(tool_name, None)
 
     return interrupt_on

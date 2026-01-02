@@ -332,6 +332,60 @@ class LoggerMiddleware(AgentMiddleware):
                 f"[MODEL RESPONSE] Structured response: {response.structured_response}"
             )
 
+    def _log_tool_call(self, tool_name: str, tool_args: dict[str, Any]) -> None:
+        """Log tool call details."""
+        try:
+            args_str = str(tool_args)[:500]  # Limit length
+            logger.info(f"[TOOL CALL] Tool: {tool_name}, Arguments: {args_str}")
+        except Exception:
+            logger.info(f"[TOOL CALL] Tool: {tool_name}")
+
+    def _log_tool_result(
+        self, tool_name: str, result: Any, success: bool = True
+    ) -> None:
+        """Log tool result details."""
+        try:
+            result_str = str(result)[:500]  # Limit length
+            status = "SUCCESS" if success else "FAILED"
+            logger.info(
+                f"[TOOL RESULT] Tool: {tool_name}, Status: {status}, Result: {result_str}"
+            )
+        except Exception:
+            logger.info(
+                f"[TOOL RESULT] Tool: {tool_name}, Status: {'SUCCESS' if success else 'FAILED'}"
+            )
+
+    def _log_interrupt(self, interrupt_data: dict[str, Any]) -> None:
+        """Log HITL interrupt details."""
+        try:
+            action_requests = interrupt_data.get("data", {}).get("action_requests", [])
+            tool_count = (
+                len(action_requests) if isinstance(action_requests, list) else 1
+            )
+            logger.info(f"[HITL INTERRUPT] Tools requiring approval: {tool_count}")
+
+            for i, request in enumerate(action_requests, 1):
+                if isinstance(request, dict):
+                    tool_name = request.get("name", "unknown")
+                    description = request.get("description", "")
+                    logger.info(
+                        f"  [{i}] Tool: {tool_name}, Description: {description}"
+                    )
+        except Exception as e:
+            logger.warning(f"[HITL INTERRUPT] Failed to log interrupt details: {e}")
+
+    def _log_approval(
+        self, approved: bool, tool_name: str | None = None, feedback: str | None = None
+    ) -> None:
+        """Log approval decision."""
+        decision = "APPROVED" if approved else "REJECTED"
+        msg = f"[HITL APPROVAL] Decision: {decision}"
+        if tool_name:
+            msg += f", Tool: {tool_name}"
+        if feedback:
+            msg += f", Feedback: {feedback}"
+        logger.info(msg)
+
     def wrap_model_call(
         self,
         request: ModelRequest,

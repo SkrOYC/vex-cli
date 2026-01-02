@@ -24,6 +24,8 @@ from vibe.core.engine.langchain_middleware import (
 from vibe.core.engine.state import VibeAgentState
 from vibe.core.engine.tools import VibeToolAdapter
 from vibe.core.engine.tui_events import TUIEventMapper
+from vibe.core.interaction_logger import InteractionLogger
+from vibe.core.types import AgentStats, LLMMessage
 
 # Default message used when a tool operation is rejected by the user
 _DEFAULT_REJECTION_MESSAGE = "Operation rejected by user"
@@ -88,16 +90,75 @@ class VibeLangChainEngine:
         self._thread_id = f"vibe-session-{uuid4()}"
         self._stats = VibeEngineStats()
         self._tui_event_mapper: TUIEventMapper | None = None
+        # Session logging
+        self._interaction_logger: InteractionLogger | None = None
+        self._messages: list[LLMMessage] = []
+        self._initialize_session_logger()
 
-    def _get_tui_event_mapper(self) -> TUIEventMapper:
-        """Lazy initialization of TUI event mapper.
+    def _initialize_session_logger(self) -> None:
+        """Initialize the session logger if logging is enabled."""
+        if self.config.session_logging.enabled:
+            try:
+                self._interaction_logger = InteractionLogger(
+                    session_config=self.config.session_logging,
+                    session_id=self._thread_id,
+                    auto_approve=False,
+                    workdir=self.config.effective_workdir,
+                )
+            except Exception:
+                # If logger fails to initialize, continue without logging
+                self._interaction_logger = None
+
+    @property
+    def session_id(self) -> str:
+        """Get the current session ID."""
+        return self._thread_id
+
+    def get_current_messages(self) -> list[LLMMessage]:
+        """Get the current conversation messages."""
+        return self._messages.copy()
+
+    async def save_session(self) -> str | None:
+        """Save the current session to disk.
 
         Returns:
-            TUIEventMapper instance for mapping native events to Vibe TUI events
+            Path to saved session file, or None if saving failed or is disabled.
         """
-        if self._tui_event_mapper is None:
-            self._tui_event_mapper = TUIEventMapper(self.config)
-        return self._tui_event_mapper
+        if not self._interaction_logger:
+            return None
+
+        try:
+            from vibe.core.tools.manager import ToolManager
+            from vibe.core.types import AgentStats
+
+            tool_manager = ToolManager(self.config)
+
+            # Convert VibeEngineStats to AgentStats
+            stats = AgentStats(
+                steps=self._stats.steps,
+                session_prompt_tokens=self._stats.session_prompt_tokens,
+                session_completion_tokens=self._stats.session_completion_tokens,
+                tool_calls_agreed=self._stats.tool_calls_agreed,
+                tool_calls_rejected=self._stats.tool_calls_rejected,
+                tool_calls_failed=self._stats.tool_calls_failed,
+                tool_calls_succeeded=self._stats.tool_calls_succeeded,
+                context_tokens=self._stats.context_tokens,
+                last_turn_prompt_tokens=self._stats.last_turn_prompt_tokens,
+                last_turn_completion_tokens=self._stats.last_turn_completion_tokens,
+                last_turn_duration=self._stats.last_turn_duration,
+                tokens_per_second=self._stats.tokens_per_second,
+                input_price_per_million=self._stats.input_price_per_million,
+                output_price_per_million=self._stats.output_price_per_million,
+            )
+
+            return await self._interaction_logger.save_interaction(
+                messages=self._messages,
+                stats=stats,
+                config=self.config,
+                tool_manager=tool_manager,
+            )
+        except Exception:
+            return None
 
     def _create_model(self) -> Any:
         """Create LangChain model from Vibe config."""
@@ -126,6 +187,16 @@ class VibeLangChainEngine:
                 model_config.output_price / 1_000_000,
             )
         return pricing
+
+    def _get_tui_event_mapper(self) -> TUIEventMapper:
+        """Lazy initialization of TUI event mapper.
+
+        Returns:
+            TUIEventMapper instance for mapping native events to Vibe TUI events
+        """
+        if self._tui_event_mapper is None:
+            self._tui_event_mapper = TUIEventMapper(self.config)
+        return self._tui_event_mapper
 
     def _build_middleware_stack(self) -> list[AgentMiddleware]:
         """Build the custom middleware stack for LangChain 1.2.0."""
@@ -205,18 +276,32 @@ class VibeLangChainEngine:
 
         messages = [("user", user_message)]
 
+        # Track user message
+        self._messages.append(LLMMessage(role="user", content=user_message))
+
         mapper = self._get_tui_event_mapper()
 
-        # Stream native LangGraph events and map to Vibe TUI events
-        async for event in self._agent.astream_events(
-            {"messages": messages}, config=config, version="v2"
-        ):
-            # Update stats incrementally from event data
-            self._update_stats_from_event(event)
+        try:
+            # Stream native LangGraph events and map to Vibe TUI events
+            async for event in self._agent.astream_events(
+                {"messages": messages}, config=config, version="v2"
+            ):
+                # Update stats incrementally from event data
+                self._update_stats_from_event(event)
 
-            mapped_event = mapper.map_event(event)
-            if mapped_event is not None:
-                yield mapped_event
+                mapped_event = mapper.map_event(event)
+                if mapped_event is not None:
+                    # Track assistant messages
+                    from vibe.core.types import AssistantEvent
+
+                    if isinstance(mapped_event, AssistantEvent):
+                        self._messages.append(
+                            LLMMessage(role="assistant", content=mapped_event.content)
+                        )
+                    yield mapped_event
+        finally:
+            # Save session when run completes
+            await self.save_session()
 
     async def handle_approval(
         self, approved: bool, feedback: str | None = None
@@ -229,6 +314,16 @@ class VibeLangChainEngine:
         """
         if self._agent is None:
             return
+
+        # Log the approval decision
+        decision = "APPROVED" if approved else "REJECTED"
+        msg = f"[HITL APPROVAL] Decision: {decision}"
+        if feedback:
+            msg += f", Feedback: {feedback}"
+
+        from vibe.core.utils import logger
+
+        logger.info(msg)
 
         config: RunnableConfig = {"configurable": {"thread_id": self._thread_id}}
 
