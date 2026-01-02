@@ -391,7 +391,7 @@ class VibeLangChainEngine:
                 total_tokens += usage.get("output_tokens", 0)
         return total_tokens
 
-    def _update_stats_from_event(self, event: dict[str, Any] | Any) -> None:
+    def _update_stats_from_event(self, event: dict[str, Any] | object) -> None:
         """Update stats incrementally from LangGraph event data.
 
         This method extracts relevant information from LangGraph events
@@ -399,10 +399,18 @@ class VibeLangChainEngine:
         from the full agent state.
 
         Args:
-            event: A dictionary or StreamEvent representing a LangGraph event from astream_events()
+            event: A dictionary or StreamEvent object representing a LangGraph event
+                from astream_events(). Events can be dicts or objects with __dict__.
         """
-        # Handle both dict and StreamEvent types from astream_events
-        event_data = event.__dict__ if not isinstance(event, dict) else event
+        # Handle both dict and object types from astream_events
+        # Events from LangGraph's astream_events can be dicts or StreamEvent objects
+        if isinstance(event, dict):
+            event_data = event
+        elif hasattr(event, "__dict__"):
+            event_data = event.__dict__
+        else:
+            # Fallback for events without __dict__ attribute
+            event_data = {}
 
         event_type = event_data.get("event", "")
 

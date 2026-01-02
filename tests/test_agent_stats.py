@@ -206,7 +206,7 @@ class TestEngineStatsIntegration:
         async for _ in engine.run("First message"):
             pass
 
-        result = await engine.compact()
+        result = engine.compact()
 
         assert "Compacted" in result
         assert "4" in result  # Original count
@@ -235,7 +235,7 @@ class TestClearHistory:
         assert stats_before.steps == 1
 
         # Clear history
-        await engine.clear_history()
+        engine.clear_history()
 
         stats_after = engine.stats
         assert stats_after.steps == 0
@@ -338,13 +338,13 @@ class TestRealTimeStatsUpdates:
         assert stats.tool_calls_succeeded == 1
 
     async def test_context_tokens_accuracy(self) -> None:
-        """Test that context_tokens are tracked accurately."""
+        """Test that context_tokens are tracked accurately with synthetic token data."""
         engine = FakeVibeLangChainEngine(
             config=make_config(),
             events_to_yield=[
-                AssistantEvent(content="Message 1"),
-                AssistantEvent(content="Message 2"),
-                AssistantEvent(content="Message 3"),
+                AssistantEvent(content="Message 1", input_tokens=10, output_tokens=20),
+                AssistantEvent(content="Message 2", input_tokens=15, output_tokens=25),
+                AssistantEvent(content="Message 3", input_tokens=5, output_tokens=10),
             ],
         )
         engine.initialize()
@@ -352,10 +352,18 @@ class TestRealTimeStatsUpdates:
         # Initial state
         assert engine.stats.context_tokens == 0
 
-        # Run and verify context tokens
+        # Track tokens during streaming
+        tokens_during_run = []
         async for _ in engine.run("Test"):
             # Context tokens should be updated during run
-            pass
+            tokens_during_run.append(engine.stats.context_tokens)
 
-        # Stats should reflect the accumulated events
-        assert engine.stats._messages >= 0
+        # Tokens should be updated after each event
+        # Message 1: 30 tokens, Message 2: 40 tokens, Message 3: 15 tokens
+        assert tokens_during_run == [30, 70, 85]
+
+        # Final stats should reflect the accumulated tokens
+        assert engine.stats.context_tokens == 85  # 30 + 40 + 15
+        assert engine.stats.session_prompt_tokens == 30  # 10 + 15 + 5
+        assert engine.stats.session_completion_tokens == 55  # 20 + 25 + 10
+        assert engine.stats.steps == 3  # Three assistant responses

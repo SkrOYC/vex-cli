@@ -249,6 +249,10 @@ class BaseEvent(BaseModel, ABC):
 class AssistantEvent(BaseEvent):
     content: str
     stopped_by_middleware: bool = False
+    # Optional token counts for testing synthetic scenarios
+    # Not used in production, but allows FakeVibeLangChainEngine to simulate token usage
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class ToolCallEvent(BaseEvent):
