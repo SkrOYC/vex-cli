@@ -14,7 +14,7 @@ from textual.widgets import Static
 class LoadingWidget(Static):
     BRAILLE_SPINNER = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
-    TARGET_COLORS = ("#FFD800", "#FFAF00", "#FF8205", "#FA500F", "#E10500")
+    TARGET_COLORS = ("$warning", "$warning", "$warning", "$error", "$error")
 
     EASTER_EGGS: ClassVar[list[str]] = [
         "Eating a chocolatine",

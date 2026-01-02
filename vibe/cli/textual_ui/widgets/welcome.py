@@ -42,9 +42,9 @@ class LineAnimationState:
 
 
 class WelcomeBanner(Static):
-    FLASH_COLOR = "#FFFFFF"
-    TARGET_COLORS = ("#FFD800", "#FFAF00", "#FF8205", "#FA500F", "#E10500")
-    BORDER_TARGET_COLOR = "#b05800"
+    FLASH_COLOR = "$foreground"
+    TARGET_COLORS = ("$warning", "$warning", "$warning", "$error", "$error")
+    BORDER_TARGET_COLOR = "$warning"
 
     LINE_ANIMATION_DURATION_MS = 200
     LINE_STAGGER_MS = 280
@@ -68,9 +68,16 @@ class WelcomeBanner(Static):
 
         self._cached_skeleton_color: str | None = None
         self._cached_skeleton_rgb: tuple[int, int, int] | None = None
-        self._flash_rgb = hex_to_rgb(self.FLASH_COLOR)
-        self._target_rgbs = [hex_to_rgb(c) for c in self.TARGET_COLORS]
-        self._border_target_rgb = hex_to_rgb(self.BORDER_TARGET_COLOR)
+
+        # Store theme variable names - will be resolved to RGB at mount time
+        self._flash_color_var = self.FLASH_COLOR
+        self._target_color_vars = list(self.TARGET_COLORS)
+        self._border_target_color_var = self.BORDER_TARGET_COLOR
+
+        # These will be set when theme is resolved
+        self._flash_rgb: tuple[int, int, int] = (0, 0, 0)
+        self._target_rgbs: list[tuple[int, int, int]] = []
+        self._border_target_rgb: tuple[int, int, int] = (0, 0, 0)
 
         self._line_states = [LineAnimationState() for _ in self.TARGET_COLORS]
         self.border_progress = 0.0
@@ -109,11 +116,13 @@ class WelcomeBanner(Static):
 
     @property
     def skeleton_color(self) -> str:
-        return self._cached_skeleton_color or "#1e1e1e"
+        return self._cached_skeleton_color or self._resolve_theme_color("$surface")
 
     @property
     def skeleton_rgb(self) -> tuple[int, int, int]:
-        return self._cached_skeleton_rgb or hex_to_rgb("#1e1e1e")
+        return self._cached_skeleton_rgb or hex_to_rgb(
+            self._resolve_theme_color("$surface")
+        )
 
     def on_mount(self) -> None:
         if not self.config.disable_welcome_banner_animation:
@@ -121,10 +130,59 @@ class WelcomeBanner(Static):
 
     def _init_after_styles(self) -> None:
         self._cache_skeleton_color()
+
+        # Resolve theme variables to RGB values for color interpolation
+        flash_hex = self._resolve_theme_color(self._flash_color_var)
+        self._flash_rgb = hex_to_rgb(flash_hex)
+
+        self._target_rgbs = [
+            hex_to_rgb(self._resolve_theme_color(color_var))
+            for color_var in self._target_color_vars
+        ]
+
+        border_hex = self._resolve_theme_color(self._border_target_color_var)
+        self._border_target_rgb = hex_to_rgb(border_hex)
+
+        # Update the static line 7 with resolved border color for help text
+        self._static_line7 = f"{self.SPACE * 4}{self.LOGO_TEXT_GAP}[dim]Type[/] [{border_hex}]/help[/] [dim]for more information[/]"
+
         self._cached_text_lines[5] = Text("")
         self._cached_text_lines[6] = Text.from_markup(self._static_line7)
         self._update_display()
         self._start_animation()
+
+    def _resolve_theme_color(self, theme_var: str) -> str:
+        """Resolve a theme variable to its hex color value.
+
+        Args:
+            theme_var: A theme variable name like "$warning", "$error", or "$foreground"
+
+        Returns:
+            The resolved hex color string, or the original value if not a theme variable
+        """
+        if not theme_var.startswith("$"):
+            # Not a theme variable, return as-is
+            return theme_var
+
+        # Define fallback colors for theme variables based on typical Textual theme values
+        theme_fallbacks: dict[str, str] = {
+            "$warning": "#FFD700",  # Amber/Gold
+            "$error": "#E10500",  # Red
+            "$success": "#00A800",  # Green
+            "$primary": "#0178D4",  # Blue
+            "$secondary": "#FFAF00",  # Amber
+            "$accent": "#FF8200",  # Orange
+            "$foreground": "#FFFFFF",  # White (typically)
+            "$background": "#1E1E1E",  # Dark gray (typically)
+            "$surface": "#2D2D2D",  # Surface color (typically)
+            "$text": "#FFFFFF",  # Text color (typically)
+            "$text-muted": "#888888",  # Muted text
+            "$text-warning": "#FFD700",  # Warning text
+            "$text-error": "#E10500",  # Error text
+            "$text-success": "#00A800",  # Success text
+        }
+
+        return theme_fallbacks.get(theme_var, theme_var)
 
     def _cache_skeleton_color(self) -> None:
         try:
@@ -141,8 +199,8 @@ class WelcomeBanner(Static):
         except (AttributeError, TypeError):
             pass
 
-        self._cached_skeleton_color = "#1e1e1e"
-        self._cached_skeleton_rgb = hex_to_rgb("#1e1e1e")
+        self._cached_skeleton_color = self._resolve_theme_color("$surface")
+        self._cached_skeleton_rgb = hex_to_rgb(self._resolve_theme_color("$surface"))
 
     def _stop_timer(self) -> None:
         if self.animation_timer:
