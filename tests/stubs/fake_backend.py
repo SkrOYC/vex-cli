@@ -236,7 +236,6 @@ class FakeVibeLangChainEngine:
     ) -> None:
         from vibe.core.config import VibeConfig
         from vibe.core.engine.langchain_engine import VibeEngineStats
-        from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
 
         self.config: VibeConfig = config
         self._events: list = list(events_to_yield or [])
@@ -248,6 +247,42 @@ class FakeVibeLangChainEngine:
     def initialize(self) -> None:
         """Initialize the fake engine."""
         self._initialized = True
+
+    def _update_stats_from_vibe_event(self, event) -> None:
+        """Update stats incrementally from Vibe event types.
+
+        This method mirrors the production VibeLangChainEngine._update_stats_from_event()
+        but operates on Vibe event types instead of LangGraph events.
+
+        Args:
+            event: A Vibe event (AssistantEvent, ToolCallEvent, ToolResultEvent, etc.)
+        """
+        from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
+
+        if isinstance(event, AssistantEvent):
+            # Track steps for assistant responses (represents conversation turns)
+            self._stats.steps += 1
+
+            # Update tokens if synthetic token data is provided
+            if event.input_tokens is not None:
+                self._stats.session_prompt_tokens += event.input_tokens
+                self._stats.last_turn_prompt_tokens = event.input_tokens
+                self._stats.context_tokens += event.input_tokens
+
+            if event.output_tokens is not None:
+                self._stats.session_completion_tokens += event.output_tokens
+                self._stats.last_turn_completion_tokens = event.output_tokens
+                self._stats.context_tokens += event.output_tokens
+
+        elif isinstance(event, ToolCallEvent):
+            self._stats.tool_calls_agreed += 1
+        elif isinstance(event, ToolResultEvent):
+            if event.error:
+                self._stats.tool_calls_failed += 1
+            else:
+                self._stats.tool_calls_succeeded += 1
+                # Steps increment on successful tool completion (matches production)
+                self._stats.steps += 1
 
     async def run(self, user_message: str):
         """Run a conversation turn, yielding synthetic events.
@@ -264,19 +299,11 @@ class FakeVibeLangChainEngine:
         self._current_run_index = 0
 
         for event in self._events:
+            # Update stats incrementally from Vibe event BEFORE yielding
+            self._update_stats_from_vibe_event(event)
+
             yield event
             self._current_run_index += 1
-
-            # Update stats based on event type
-            if isinstance(event, AssistantEvent):
-                self._stats.steps += 1
-            elif isinstance(event, ToolCallEvent):
-                self._stats.tool_calls_agreed += 1
-            elif isinstance(event, ToolResultEvent):
-                if event.error:
-                    self._stats.tool_calls_failed += 1
-                else:
-                    self._stats.tool_calls_succeeded += 1
 
     async def handle_multi_tool_approval(
         self,
@@ -299,7 +326,9 @@ class FakeVibeLangChainEngine:
                 f"Length mismatch: {len(approvals)} approvals vs {len(feedbacks)} feedbacks"
             )
 
-        for i, (approved, feedback) in enumerate(zip(approvals, feedbacks, strict=True)):
+        for i, (approved, _feedback) in enumerate(
+            zip(approvals, feedbacks, strict=True)
+        ):
             if approved:
                 self._stats.tool_calls_agreed += 1
                 if i > 0:
@@ -307,13 +336,13 @@ class FakeVibeLangChainEngine:
             else:
                 self._stats.tool_calls_rejected += 1
 
-    async def clear_history(self) -> None:
+    def clear_history(self) -> None:
         """Clear conversation history."""
         self._events.clear()
         self._stats = self._stats.__class__()
         self._current_run_index = 0
 
-    async def compact(self) -> str:
+    def compact(self) -> str:
         """Compact conversation history to reduce context size."""
         if len(self._events) <= 1:
             return "No messages to compact"

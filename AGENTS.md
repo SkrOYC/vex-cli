@@ -164,6 +164,82 @@ When updating tests from legacy `Agent` to `VibeLangChainEngine`:
 - [ ] Update `reload_with_initial_messages()` to use LangGraph state
 - [ ] Verify all tests work offline (no API keys required)
 
+## Real-Time Stats Updates
+
+The `VibeLangChainEngine` now implements real-time stats updates during event streaming. This ensures the UI displays accurate statistics during agent execution, fixing the issue where stats were only updated on-demand.
+
+### How It Works
+
+1. **Incremental Updates**: Stats are updated incrementally from LangGraph events during the `run()` method's event streaming loop
+2. **Event-Driven**: `on_chat_model_end` events provide token usage via `usage_metadata`, while `on_tool_end` events track step completion
+3. **Lightweight Property Access**: The `stats` property now simply returns the current stats state without expensive recomputation
+
+### Implementation Details
+
+**Production Code** (`vibe/core/engine/langchain_engine.py`):
+```python
+async def run(self, user_message: str) -> AsyncGenerator[Any, None]:
+    async for event in self._agent.astream_events(...):
+        # Update stats incrementally from event data
+        self._update_stats_from_event(event)
+        
+        mapped_event = mapper.map_event(event)
+        if mapped_event is not None:
+            yield mapped_event
+
+def _update_stats_from_event(self, event: dict[str, Any]) -> None:
+    event_type = event.get("event", "")
+    
+    if event_type == "on_chat_model_end":
+        # Extract usage_metadata from AIMessage output
+        output = event.get("data", {}).get("output", {})
+        if hasattr(output, "usage_metadata") and output.usage_metadata:
+            usage = output.usage_metadata
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            
+            # Update session and last turn token counts
+            self._stats.session_prompt_tokens += input_tokens
+            self._stats.session_completion_tokens += output_tokens
+            self._stats.last_turn_prompt_tokens = input_tokens
+            self._stats.last_turn_completion_tokens = output_tokens
+            
+            # Update context tokens incrementally
+            self._stats.context_tokens += input_tokens + output_tokens
+    
+    elif event_type == "on_tool_end":
+        self._stats.steps += 1
+```
+
+**Test Infrastructure** (`tests/stubs/fake_backend.py`):
+- `FakeVibeLangChainEngine` mirrors this behavior with `_update_stats_from_vibe_event()` method
+- Updates stats before yielding events to ensure accurate stats during streaming
+
+### Testing Real-Time Updates
+
+Use the test pattern to verify real-time stats updates:
+
+```python
+async def test_stats_update_during_run(self) -> None:
+    engine = FakeVibeLangChainEngine(
+        config=make_config(),
+        events_to_yield=[
+            AssistantEvent(content="Response 1"),
+            AssistantEvent(content="Response 2"),
+        ],
+    )
+    engine.initialize()
+
+    # Track stats during streaming
+    stats_during_run = []
+    async for event in engine.run("Test"):
+        stats_during_run.append(engine.stats.steps)
+
+    # Stats should have been updated during streaming
+    assert stats_during_run[0] == 1  # First event processed
+    assert stats_during_run[1] == 2  # Second event processed
+```
+
 ## Common Pitfalls to Avoid
 
 ### Pitfall 1: Not Initializing Fake Engine

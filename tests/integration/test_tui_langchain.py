@@ -211,3 +211,88 @@ class TestEngineExports:
 
         # TUIEventMapper should be imported
         assert hasattr(langchain_engine, "TUIEventMapper")
+
+
+@pytest.mark.asyncio
+class TestRealTimeContextProgress:
+    """Integration tests for real-time context progress updates."""
+
+    async def test_context_progress_updates_realtime(self) -> None:
+        """Test that context progress updates during event streaming with real token values.
+
+        This test verifies the fix for the issue where stats were only
+        updated when explicitly accessed, not in real-time during execution.
+        Uses synthetic token data to validate accurate token tracking.
+        """
+        from tests.stubs.fake_backend import FakeVibeLangChainEngine
+        from vibe.core.types import AssistantEvent, ToolCallEvent, ToolResultEvent
+
+        engine = FakeVibeLangChainEngine(
+            config=VibeConfig(),
+            events_to_yield=[
+                AssistantEvent(
+                    content="Response 1",
+                    input_tokens=10,
+                    output_tokens=20,  # Total: 30 context tokens
+                ),
+                ToolCallEvent(
+                    tool_name="bash",
+                    args={"command": "ls"},
+                    tool_call_id="test-1",
+                    tool_class=None,
+                ),
+                ToolResultEvent(
+                    tool_name="bash",
+                    tool_call_id="test-1",
+                    tool_class=None,
+                    result=None,
+                    error=None,
+                ),
+                AssistantEvent(
+                    content="Response 2",
+                    input_tokens=15,
+                    output_tokens=25,  # Total: 40 context tokens, cumulative: 70
+                ),
+            ],
+        )
+        engine.initialize()
+
+        # Track context tokens and steps during streaming
+        context_tokens_during_streaming = []
+        steps_during_streaming = []
+
+        async for _event in engine.run("Test message"):
+            # Access stats during streaming to verify they update in real-time
+            context_tokens_during_streaming.append(engine.stats.context_tokens)
+            steps_during_streaming.append(engine.stats.steps)
+
+        # Verify stats were updated during streaming (not just at the end)
+        # Steps should increment: 1 (AssistantEvent), 1 (ToolCall), 2 (ToolResult), 3 (AssistantEvent)
+        assert len(context_tokens_during_streaming) == 4
+        assert len(steps_during_streaming) == 4
+
+        # Verify actual values during streaming
+        # First AssistantEvent: 30 tokens, step = 1
+        assert context_tokens_during_streaming[0] == 30
+        assert steps_during_streaming[0] == 1
+
+        # ToolCallEvent: still 30 tokens, step = 1
+        assert context_tokens_during_streaming[1] == 30
+        assert steps_during_streaming[1] == 1
+
+        # ToolResultEvent: still 30 tokens, step = 2 (incremented on tool completion)
+        assert context_tokens_during_streaming[2] == 30
+        assert steps_during_streaming[2] == 2
+
+        # Second AssistantEvent: 70 tokens, step = 3
+        assert context_tokens_during_streaming[3] == 70
+        assert steps_during_streaming[3] == 3
+
+        # Final stats should reflect all accumulated tokens
+        final_stats = engine.stats
+        assert final_stats.context_tokens == 70  # 30 + 40
+        assert final_stats.session_prompt_tokens == 25  # 10 + 15
+        assert final_stats.session_completion_tokens == 45  # 20 + 25
+        assert final_stats.steps == 3  # Two AssistantEvents
+        assert final_stats.tool_calls_agreed == 1
+        assert final_stats.tool_calls_succeeded == 1

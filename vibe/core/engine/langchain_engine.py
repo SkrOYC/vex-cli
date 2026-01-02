@@ -212,6 +212,9 @@ class VibeLangChainEngine:
         async for event in self._agent.astream_events(
             {"messages": messages}, config=config, version="v2"
         ):
+            # Update stats incrementally from event data
+            self._update_stats_from_event(event)
+
             mapped_event = mapper.map_event(event)
             if mapped_event is not None:
                 yield mapped_event
@@ -362,14 +365,18 @@ class VibeLangChainEngine:
 
     @property
     def stats(self) -> VibeEngineStats:
-        """Get current session statistics."""
+        """Get current session statistics.
+
+        Note: Stats are updated incrementally during event streaming.
+        This property now simply returns the current stats state.
+        """
+        # Keep message count for backward compatibility with UI
+        # (context_tokens is already updated incrementally in run())
         if self._agent is not None:
             state = self._agent.get_state({
                 "configurable": {"thread_id": self._thread_id}
             })
             messages = state.values.get("messages", [])
-            context_tokens = self._get_actual_token_count(messages)
-            self._stats.context_tokens = context_tokens
             self._stats._messages = len(messages)
 
         return self._stats
@@ -383,3 +390,50 @@ class VibeLangChainEngine:
                 total_tokens += usage.get("input_tokens", 0)
                 total_tokens += usage.get("output_tokens", 0)
         return total_tokens
+
+    def _update_stats_from_event(self, event: dict[str, Any] | object) -> None:
+        """Update stats incrementally from LangGraph event data.
+
+        This method extracts relevant information from LangGraph events
+        to incrementally update statistics without needing to recompute
+        from the full agent state.
+
+        Args:
+            event: A dictionary or StreamEvent object representing a LangGraph event
+                from astream_events(). Events can be dicts or objects with __dict__.
+        """
+        # Handle both dict and object types from astream_events
+        # Events from LangGraph's astream_events can be dicts or StreamEvent objects
+        if isinstance(event, dict):
+            event_data = event
+        elif hasattr(event, "__dict__"):
+            event_data = event.__dict__
+        else:
+            # Fallback for events without __dict__ attribute
+            event_data = {}
+
+        event_type = event_data.get("event", "")
+
+        # Handle chat model completion events (token usage)
+        if event_type == "on_chat_model_end":
+            output = event_data.get("data", {}).get("output", {})
+            # The output is typically an AIMessage with usage_metadata
+            if hasattr(output, "usage_metadata") and output.usage_metadata:
+                usage = output.usage_metadata
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+
+                # Update session token counts
+                self._stats.session_prompt_tokens += input_tokens
+                self._stats.session_completion_tokens += output_tokens
+
+                # Update last turn token counts
+                self._stats.last_turn_prompt_tokens = input_tokens
+                self._stats.last_turn_completion_tokens = output_tokens
+
+                # Update context tokens incrementally
+                self._stats.context_tokens += input_tokens + output_tokens
+
+        # Handle tool completion events (step tracking)
+        elif event_type == "on_tool_end":
+            self._stats.steps += 1
