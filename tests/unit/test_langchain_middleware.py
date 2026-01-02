@@ -44,6 +44,8 @@ class TestContextWarningMiddleware:
         )
         state = {"messages": ["long message content"] * 100 + [ai_message]}
 
+        # after_model must be called first to populate cumulative tokens
+        middleware.after_model(state, cast(Runtime, None))
         result = middleware.before_model(state, cast(Runtime, None))
         assert result is not None
         assert "warning" in result
@@ -54,12 +56,25 @@ class TestContextWarningMiddleware:
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
         state = {"messages": ["long message content"] * 100}
 
-        # First call should warn (will fall back to estimation)
-        result1 = middleware.before_model(state, cast(Runtime, None))
+        # after_model must be called first to populate cumulative tokens
+        # Estimation fallback is no longer used, so we need usage_metadata
+        ai_message = AIMessage(
+            content="response",
+            usage_metadata={
+                "input_tokens": 300,
+                "output_tokens": 300,
+                "total_tokens": 600,
+            },
+        )
+        state_with_meta = {"messages": [ai_message]}
+        middleware.after_model(state_with_meta, cast(Runtime, None))
+
+        # First call should warn (600 > 500 threshold)
+        result1 = middleware.before_model(state_with_meta, cast(Runtime, None))
         assert result1 is not None
 
         # Second call should not warn (already warned)
-        result2 = middleware.before_model(state, cast(Runtime, None))
+        result2 = middleware.before_model(state_with_meta, cast(Runtime, None))
         assert result2 is None
 
     def test_no_warning_when_max_context_none(self):
@@ -86,6 +101,8 @@ class TestContextWarningMiddleware:
         # Add lots of content that would estimate high, but usage_metadata should be used
         state = {"messages": ["very long content " * 1000] * 100 + [ai_message]}
 
+        # after_model must be called first to populate cumulative tokens
+        middleware.after_model(state, cast(Runtime, None))
         result = middleware.before_model(state, cast(Runtime, None))
         assert result is not None
         assert "warning" in result
@@ -96,8 +113,13 @@ class TestContextWarningMiddleware:
         middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=1000)
 
         # Create messages without usage_metadata
-        # "short message" is 13 chars, * 2000 = 26k chars, /4 = 6500 tokens
+        # Note: With cumulative tracking, we need to manually set cumulative_tokens
+        # since after_model won't update it without usage_metadata
         state = {"messages": ["short message"] * 2000}
+
+        # Manually set cumulative tokens for estimation fallback scenario
+        # "short message" is 13 chars, * 2000 = 26k chars, /4 = 6500 tokens
+        middleware._cumulative_tokens = 6500
 
         result = middleware.before_model(state, cast(Runtime, None))
         assert result is not None
@@ -118,6 +140,8 @@ class TestContextWarningMiddleware:
         )
         state = {"messages": [ai_message]}
 
+        # after_model must be called first to populate cumulative tokens
+        middleware.after_model(state, cast(Runtime, None))
         result = middleware.before_model(state, cast(Runtime, None))
         assert result is not None
         warning = result["warning"]
@@ -546,3 +570,143 @@ class TestLoggerMiddleware:
         # Exact length
         exact = "x" * 200
         assert middleware._truncate_result(exact) == exact
+
+
+class TestContextWarningMiddlewareCumulative:
+    """Test ContextWarningMiddleware cumulative token tracking."""
+
+    def test_cumulative_tokens_across_turns(self):
+        """Test that token count accumulates across multiple turns."""
+        middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=10000)
+
+        # Simulate turn 1: 1000 tokens
+        ai_message1 = AIMessage(
+            content="response1",
+            usage_metadata={
+                "input_tokens": 500,
+                "output_tokens": 500,
+                "total_tokens": 1000,
+            },
+        )
+        state1 = {"messages": [ai_message1]}
+        middleware.after_model(state1, cast(Runtime, None))
+
+        # Simulate turn 2: 1500 tokens (total should be 2500)
+        ai_message2 = AIMessage(
+            content="response2",
+            usage_metadata={
+                "input_tokens": 750,
+                "output_tokens": 750,
+                "total_tokens": 1500,
+            },
+        )
+        state2 = {"messages": [ai_message1, ai_message2]}
+        middleware.after_model(state2, cast(Runtime, None))
+
+        # Verify cumulative token count is correct
+        assert middleware._cumulative_tokens == 2500
+
+    def test_warning_triggers_at_correct_cumulative_threshold(self):
+        """Test that warning triggers at 50% of cumulative tokens, not per-message."""
+        middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=10000)
+
+        # Turn 1: 1000 tokens (10%, no warning)
+        ai_message1 = AIMessage(
+            content="response1",
+            usage_metadata={
+                "input_tokens": 500,
+                "output_tokens": 500,
+                "total_tokens": 1000,
+            },
+        )
+        state1 = {"messages": [ai_message1]}
+        middleware.after_model(state1, cast(Runtime, None))
+
+        result1 = middleware.before_model(state1, cast(Runtime, None))
+        assert result1 is None
+
+        # Turn 2: 1500 tokens, cumulative 2500 (25%, no warning)
+        ai_message2 = AIMessage(
+            content="response2",
+            usage_metadata={
+                "input_tokens": 750,
+                "output_tokens": 750,
+                "total_tokens": 1500,
+            },
+        )
+        state2 = {"messages": [ai_message1, ai_message2]}
+        middleware.after_model(state2, cast(Runtime, None))
+
+        result2 = middleware.before_model(state2, cast(Runtime, None))
+        assert result2 is None
+
+        # Turn 3: 3500 tokens, cumulative 6000 (60%, should warn at 50%)
+        ai_message3 = AIMessage(
+            content="response3",
+            usage_metadata={
+                "input_tokens": 1750,
+                "output_tokens": 1750,
+                "total_tokens": 3500,
+            },
+        )
+        state3 = {"messages": [ai_message1, ai_message2, ai_message3]}
+        middleware.after_model(state3, cast(Runtime, None))
+
+        result3 = middleware.before_model(state3, cast(Runtime, None))
+        assert result3 is not None
+        assert "warning" in result3
+        assert "60%" in result3["warning"]  # 6000/10000 = 60%
+
+    def test_no_double_counting_in_single_state(self):
+        """Test that multiple messages in same state don't double-count."""
+        middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=10000)
+
+        # Create state with multiple AI messages
+        ai_message1 = AIMessage(
+            content="response1",
+            usage_metadata={
+                "input_tokens": 500,
+                "output_tokens": 500,
+                "total_tokens": 1000,
+            },
+        )
+        ai_message2 = AIMessage(
+            content="response2",
+            usage_metadata={
+                "input_tokens": 500,
+                "output_tokens": 500,
+                "total_tokens": 1000,
+            },
+        )
+
+        # Only the last message should be counted by after_model
+        state = {"messages": [ai_message1, ai_message2]}
+        middleware.after_model(state, cast(Runtime, None))
+
+        # Should only count the last message's tokens (1000), not both
+        assert middleware._cumulative_tokens == 1000
+
+    def test_preserves_warning_behavior_with_cumulative_tracking(self):
+        """Test that warning still only fires once with cumulative tracking."""
+        middleware = ContextWarningMiddleware(threshold_percent=0.5, max_context=10000)
+
+        # Simulate crossing threshold
+        ai_message1 = AIMessage(
+            content="response1",
+            usage_metadata={
+                "input_tokens": 2500,
+                "output_tokens": 2500,
+                "total_tokens": 5000,
+            },
+        )
+        state1 = {"messages": [ai_message1]}
+        middleware.after_model(state1, cast(Runtime, None))
+
+        # First call should warn (50% threshold reached)
+        result1 = middleware.before_model(state1, cast(Runtime, None))
+        assert result1 is not None
+        assert "warning" in result1
+
+        # Second call should NOT warn (already warned)
+        result2 = middleware.before_model(state1, cast(Runtime, None))
+        assert result2 is None
