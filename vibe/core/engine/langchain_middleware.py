@@ -96,6 +96,18 @@ class ContextWarningMiddleware(AgentMiddleware):
                 )
         return None
 
+    async def abefore_model(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Async version of before_model for LangGraph compatibility."""
+        return self.before_model(state, runtime)
+
+    async def aafter_model(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Async version of after_model for LangGraph compatibility."""
+        return self.after_model(state, runtime)
+
     def _get_current_token_count(self, state: AgentState) -> int:
         """Get current token count from cumulative tracking.
 
@@ -230,6 +242,18 @@ class PriceLimitMiddleware(AgentMiddleware):
 
         return None
 
+    async def abefore_model(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Async version of before_model for LangGraph compatibility."""
+        return self.before_model(state, runtime)
+
+    async def aafter_model(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Async version of after_model for LangGraph compatibility."""
+        return self.after_model(state, runtime)
+
 
 class LoggerMiddleware(AgentMiddleware):
     """Log agent execution for observability and debugging.
@@ -265,6 +289,18 @@ class LoggerMiddleware(AgentMiddleware):
             session_id = getattr(runtime, "session_id", "unknown")
             logger.info(f"[SESSION END] Agent session {session_id} completed")
         return None
+
+    async def abefore_agent(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Async version of before_agent for LangGraph compatibility."""
+        return self.before_agent(state, runtime)
+
+    async def aafter_agent(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Async version of after_agent for LangGraph compatibility."""
+        return self.after_agent(state, runtime)
 
     def _log_model_request(self, request: ModelRequest) -> None:
         """Logs model request details."""
