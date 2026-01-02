@@ -54,9 +54,6 @@ class ChatTextArea(TextArea):
         self._cursor_moved_since_load: bool = False
         self._completion_manager: MultiCompletionManager | None = None
 
-    def on_blur(self, event: events.Blur) -> None:
-        self.call_after_refresh(self.focus)
-
     def on_click(self, event: events.Click) -> None:
         self._mark_cursor_moved_if_needed()
 

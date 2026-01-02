@@ -294,6 +294,3 @@ class ApprovalApp(Container):
         """Set the approval result on the app's pending approval future."""
         if self.pending_approval_future and not self.pending_approval_future.done():
             self.pending_approval_future.set_result(result)
-
-    def on_blur(self, event: events.Blur) -> None:
-        self.call_after_refresh(self.focus)

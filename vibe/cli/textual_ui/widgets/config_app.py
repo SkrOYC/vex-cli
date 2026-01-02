@@ -151,6 +151,3 @@ class ConfigApp(Container):
 
     def action_close(self) -> None:
         self.post_message(self.ConfigClosed(changes=self.changes.copy()))
-
-    def on_blur(self, event: events.Blur) -> None:
-        self.call_after_refresh(self.focus)
