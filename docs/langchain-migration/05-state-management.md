@@ -174,3 +174,40 @@ class CheckpointManager:
 - [ ] Checkpoints save and restore correctly
 - [ ] Stats are derived from native state
 - [ ] Ready for user's custom SQLite checkpointing
+
+## ⚠️ Critical Issues Found (Post-Migration Audit)
+
+1. **VibeAgentState Missing Annotations** ⚠️ MEDIUM
+   - Missing `NotRequired`, `EphemeralValue`, `PrivateStateAttr`
+   - Breaks LangGraph state management
+   - **Fix Required**: Add proper LangGraph state annotations
+
+## ⚠️ Critical Issues Found (Post-Migration Audit)
+
+1. **VibeAgentState Missing LangGraph Type Annotations** ⚠️ MEDIUM
+   - Missing `NotRequired`, `EphemeralValue`, `PrivateStateAttr`, `OmitFromInput`, `OmitFromOutput`
+   - Breaks LangGraph state management behavior:
+     - `warning` field persists incorrectly across turns (should be ephemeral)
+     - `context_tokens` has no default value (causes errors)
+     - Internal fields exposed in input/output schemas
+   - **Fix Required:** Add proper LangGraph annotations (see Priority 1 in 00-overview.md)
+
+2. **Manual Token Counting in Engine** ⚠️ LOW
+   - `VibeLangChainEngine._get_actual_token_count()` sums usage_metadata manually
+   - Should prefer cumulative tracking from state or middleware
+   - **Fix Required:** Migrate to state-based tracking (see Priority 2 in 00-overview.md)
+
+**Impact:**
+- State schema doesn't integrate properly with LangGraph's state management
+- Warnings persist incorrectly across graph steps
+- May cause unexpected behavior in state persistence
+
+**Required Fixes:**
+1. Add TYPE_CHECKING imports for LangGraph channel annotations
+2. Annotate `warning` with `EphemeralValue`, `PrivateStateAttr`, `OmitFromInput`, `OmitFromOutput`
+3. Annotate `context_tokens` with `NotRequired`, `PrivateStateAttr`
+4. Update ContextWarningMiddleware to use state's `warning` field correctly
+
+2. **Manual Token Counting in Stats** ⚠️ LOW
+   - Engine uses manual `_get_actual_token_count()` instead of `usage_metadata`
+   - **Fix Required**: Migrate to state-based tracking

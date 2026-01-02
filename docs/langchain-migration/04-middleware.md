@@ -6,21 +6,89 @@ Replace the current middleware implementation (which works around DeepAgents' fo
 
 ## Current Middleware System
 
-### `vibe/core/engine/middleware.py` Structure (204 lines)
+### Current Middleware Status
 
+**Existing Implementation:**
+- File: `vibe/core/engine/langchain_middleware.py` (~250 lines)
+- Classes: `ContextWarningMiddleware`, `PriceLimitMiddleware`, `LoggerMiddleware`
+- Status: ⚠️ Requires fixes (see below)
+
+### Critical Middleware Issues
+
+#### 1. ContextWarningMiddleware Token Bug ❌
+
+**Problem:**
+- Uses per-message `usage_metadata["total_tokens"]` instead of cumulative
+- Warnings trigger at wrong percentages
+
+**Fix Required:**
 ```python
-"""Custom middleware for DeepAgents integration."""
-
-from langchain.agents.middleware.types import AgentMiddleware, AgentState
-from langgraph.runtime import Runtime
-
+# Add cumulative tracking
 class ContextWarningMiddleware(AgentMiddleware):
-    """Warn user when context usage reaches threshold."""
-    # Implemented as AgentMiddleware for DeepAgents
-    
-class PriceLimitMiddleware(AgentMiddleware):
-    """Stop execution when price limit is exceeded."""
-    # Implemented as AgentMiddleware for DeepAgents
+    def __init__(
+        self, threshold_percent: float = 0.5, max_context: int | None = None
+    ) -> None:
+        self.threshold_percent = threshold_percent
+        self.max_context = max_context
+        self._warned = False
+        self._cumulative_tokens = 0  # ✅ ADD: Track cumulative
+
+    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        """Update cumulative token count after model call."""
+        messages = state.get("messages", [])
+        if messages and isinstance(messages[-1], AIMessage):
+            last_msg = messages[-1]
+            if last_msg.usage_metadata:
+                self._cumulative_tokens += last_msg.usage_metadata.get("total_tokens", 0)
+        return None
+
+    def _get_current_token_count(self, state: AgentState) -> int:
+        """Get cumulative session token count."""
+        # ✅ FIX: Return cumulative, not per-message
+        return self._cumulative_tokens
+```
+
+#### 2. Missing Async Middleware Variants ❌
+
+**Problem:**
+- All middlewares only implement sync hooks
+- Will crash if LangGraph calls async variants (`abefore_model`, etc.)
+
+**Fix Required:**
+```python
+# ContextWarningMiddleware
+async def abefore_model(self, state: AgentState, runtime: Runtime):
+    return self.before_model(state, runtime)
+
+async def aafter_model(self, state: AgentState, runtime: Runtime):
+    return self.after_model(state, runtime)
+
+# PriceLimitMiddleware
+async def abefore_model(self, state: AgentState, runtime: Runtime):
+    return self.before_model(state, runtime)
+
+async def aafter_model(self, state: AgentState, runtime: Runtime):
+    return self.after_model(state, runtime)
+
+# LoggerMiddleware
+async def abefore_agent(self, state: AgentState, runtime: Runtime):
+    return self.before_agent(state, runtime)
+
+async def aafter_agent(self, state: AgentState, runtime: Runtime):
+    return self.after_agent(state, runtime)
+```
+
+#### 3. PriceLimitMiddleware Model Name Bug ⚠️
+
+**Problem:**
+- Uses `state.get("model_name", "default")` instead of constructor param
+
+**Fix Required:**
+```python
+def after_model(self, state: AgentState, runtime: Runtime):
+    # ✅ FIX: Use self.model_name from constructor
+    input_rate, output_rate = self.pricing.get(self.model_name, (0.0, 0.0))
+```
 
 def build_middleware_stack(config, model, backend):
     """Build the middleware stack for DeepAgents.
@@ -216,14 +284,16 @@ def _build_middleware_stack(self) -> list[AgentMiddleware]:
         )
 
     # 3. Human-in-the-loop (native LangChain 1.2.0)
-    # No ApprovalBridge needed - native integration!
     interrupt_on = self._build_interrupt_config()
     if interrupt_on:
         middleware.append(
             HumanInTheLoopMiddleware(interrupt_on=interrupt_on)
         )
-
+    
     return middleware
+
+### ⚠️ Middleware Order Critical
+**HITL MUST BE LAST** in middleware stack (after all filtering logic).
 ```
 
 ## Comparison with DeepAgents
@@ -248,3 +318,30 @@ def _build_middleware_stack(self) -> list[AgentMiddleware]:
 - [ ] Middleware stack executes in correct order
 - [ ] Token counts are accurate
 - [ ] No regressions from old middleware
+- [ ] Async middleware variants work correctly
+
+## ⚠️ Critical Issues Found (Post-Migration Audit)
+
+1. **interrupt_before Parameter Removed** ✅
+   - `interrupt_before=["tools"]` must be deleted from `create_agent()` call
+   - Conflicts with `HumanInTheLoopMiddleware`
+   - See docs/langchain-migration/02-agent-engine.md for fix
+
+2. **ContextWarningMiddleware Token Tracking** ⚠️
+   - Currently uses per-message `usage_metadata["total_tokens"]` instead of cumulative
+   - Must add `_cumulative_tokens` tracking
+   - See docs/langchain-migration/04-middleware.md for details
+
+3. **Missing Async Middleware Variants** ⚠️
+   - All middlewares only implement sync hooks
+   - Must implement `abefore_model`, `aafter_model`, etc.
+   - See docs/langchain-migration/04-middleware.md for details
+
+4. **VibeAgentState Type Annotations** ⚠️
+   - Missing `NotRequired`, `EphemeralValue`, `PrivateStateAttr`
+   - See docs/langchain-migration/05-state-management.md for details
+
+5. **PriceLimitMiddleware Model Name** ⚠️
+   - Uses `state.get("model_name", "default")` instead of constructor param
+   - Must use `self.model_name` from constructor
+   - See docs/langchain-migration/04-middleware.md for details

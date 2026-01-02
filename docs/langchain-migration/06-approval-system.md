@@ -136,3 +136,48 @@ class ApprovalApp(Container):
 - [ ] Pattern-based auto-approval works
 - [ ] No ApprovalBridge code remains
 - [ ] Timeout handling works correctly
+
+## ⚠️ Critical Issues Found (Post-Migration Audit)
+
+1. **interrupt_before Parameter Removed** ✅
+   - `interrupt_before=["tools"]` must be deleted from `create_agent()` call
+   - Conflicts with `HumanInTheLoopMiddleware` (two competing interrupt mechanisms)
+   - Defeats permission system - tools with `ALWAYS` permission will still pause
+   - Can cause double-pause or state corruption
+   - **Fix:** Delete `interrupt_before=["tools"]` line from `langchain_engine.py` (line 188)
+   - **Impact:** Critical - Breaks HITL approval system
+
+2. **ContextWarningMiddleware Token Tracking** ⚠️
+   - Currently uses per-message `usage_metadata["total_tokens"]` instead of cumulative
+   - Must add `_cumulative_tokens` tracking in `after_model` hook
+   - Warnings trigger at wrong percentages
+   - **Fix:** See Priority 1 in 00-overview.md for implementation
+   - **Impact:** High - Incorrect context warnings, potential budget overruns
+
+3. **Missing Async Middleware Variants** ⚠️
+   - All middlewares only implement sync hooks
+   - Will crash if LangGraph calls async variants
+   - **Fix:** Implement `abefore_model`, `aafter_model`, etc. for all middleware
+   - **Impact:** High - Crashes on async execution
+
+4. **VibeAgentState Type Annotations** ⚠️
+   - Missing `NotRequired`, `EphemeralValue`, `PrivateStateAttr`, `OmitFromInput`, `OmitFromOutput`
+   - **Fix:** Add proper LangGraph annotations (see Priority 1 in 00-overview.md)
+   - **Impact:** Medium - State may behave unexpectedly
+
+5. **PriceLimitMiddleware Model Name Bug** ⚠️
+   - Uses `state.get("model_name", "default")` instead of constructor param
+   - **Fix:** Use `self.model_name` from constructor (see Priority 1 in 00-overview.md)
+   - **Impact:** Medium - Price limits don't work
+
+**Middleware Order Critical:**
+- `HumanInTheLoopMiddleware` must be LAST in middleware stack
+- Incorrect order will cause approval bugs (HITL triggered before filtering)
+
+**Action Required:**
+- Fix these issues before production deployment
+- See detailed implementation in individual migration docs:
+  - 02-agent-engine.md (interrupt_before removal)
+  - 04-middleware.md (async variants, token tracking, model_name bug)
+  - 05-state-management.md (VibeAgentState annotations)
+- Estimated effort: 2-3 hours

@@ -141,3 +141,56 @@ async def test_same_outputs():
 - [ ] No regressions in TUI
 - [ ] All skipped tests are addressed
 - [ ] Documentation updated
+
+## Critical Issues Found (Post-Migration Audit)
+
+1. **interrupt_before Parameter Removed** ✅
+   - `interrupt_before=["tools"]` must be deleted from `create_agent()` call
+   - Conflicts with `HumanInTheLoopMiddleware` (two competing interrupt mechanisms)
+   - Defeats permission system (ALWAYS tools still pause)
+   - Can cause double-pause or state corruption
+   - **Fix:** Delete `interrupt_before=["tools"]` line from `langchain_engine.py` (see Priority 0 in 00-overview.md)
+   - **Impact:** Critical - Breaks HITL approval system
+
+2. **ContextWarningMiddleware Token Tracking** ⚠️
+   - Currently returns per-message `usage_metadata["total_tokens"]` instead of cumulative
+   - Example: After 2 turns with 1000 + 1500 tokens, returns 1500 instead of 2500
+   - Warnings trigger at wrong thresholds (30% instead of 50%)
+   - **Fix:** Add `_cumulative_tokens` tracking in `after_model` hook (see Priority 1 in 00-overview.md)
+   - **Impact:** High - Incorrect context warnings, potential budget overruns
+
+3. **Missing Async Middleware Variants** ⚠️
+   - All middlewares only implement sync hooks (`before_model`, `after_model`, etc.)
+   - Will crash if LangGraph calls async variants (`abefore_model`, `aafter_model`, etc.)
+   - **Fix:** Implement async variants for all middleware (see Priority 1 in 00-overview.md)
+   - **Implementation:** Delegate to sync versions for simple middlewares
+   - **Impact:** High - Crashes on async execution path
+
+4. **VibeAgentState Missing LangGraph Type Annotations** ⚠️
+   - Missing `NotRequired`, `EphemeralValue`, `PrivateStateAttr`, `OmitFromInput`, `OmitFromOutput`
+   - Breaks LangGraph state management behavior:
+     - `warning` field persists incorrectly across turns (should be ephemeral)
+     - `context_tokens` has no default value (may cause errors)
+     - Internal fields exposed in input/output schemas
+   - **Fix:** Add proper LangGraph annotations (see Priority 1 in 00-overview.md)
+   - **Impact:** Medium - State may behave unexpectedly
+
+5. **PriceLimitMiddleware Model Name Lookup Bug** ⚠️
+   - Uses `state.get("model_name", "default")` instead of constructor `self.model_name`
+   - `model_name` is NOT in standard `AgentState` schema
+   - Always looks up "default" pricing key (may not exist)
+   - Price limits never trigger correctly (rates = 0.0, 0.0)
+   - **Fix:** Use `self.model_name` from constructor in `after_model` (see Priority 1 in 00-overview.md)
+   - **Impact:** Medium - Price limits don't work
+
+**Test Updates Required:**
+- Add tests for async middleware execution paths
+- Add tests for cumulative token tracking
+- Add tests for ephemeral state fields (reset between turns)
+- Add tests for correct price limit model name lookup
+- Update integration tests to verify fixes work end-to-end
+
+**Action Required:**
+- Fix these 5 issues before production deployment
+- Estimated effort: 2-3 hours
+- See 00-overview.md for detailed priority action plan

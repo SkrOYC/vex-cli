@@ -166,7 +166,8 @@ class VibeLangChainEngine:
             system_prompt=self._get_system_prompt(),
             middleware=self._build_middleware_stack(),
             checkpointer=self._checkpointer,
-            interrupt_before=["tools"],  # Native HITL
+            # CRITICAL: interrupt_before=["tools"] CONFLICTS WITH HITL MIDDLEWARE
+            # DELETE THIS LINE - See docs/langchain-migration/06-approval-system.md
         )
 
     async def run(self, user_message: str) -> AsyncGenerator[Any, None]:

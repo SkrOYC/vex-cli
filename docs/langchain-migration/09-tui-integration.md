@@ -78,3 +78,17 @@ async def on_approval_decision(self, approved: bool, feedback: str | None = None
 - [ ] Context warnings display
 - [ ] All keyboard shortcuts work
 - [ ] No regressions in UX
+
+## ⚠️ Critical Issues Found (Post-Migration Audit)
+
+1. **Missing Async Middleware Variants** ⚠️
+   - All middlewares only implement sync hooks
+   - Will crash if LangGraph calls async variants during TUI event handling
+   - **Fix Required:** Implement `abefore_model`, `aafter_model`, etc. for all middleware
+   - **Implementation:** Delegate to sync versions:
+     ```python
+     async def abefore_model(self, state: AgentState, runtime: Runtime):
+         return self.before_model(state, runtime)
+     ```
+   - **Impact:** High - Crashes on async execution
+   - **See Also:** docs/langchain-migration/04-middleware.md for details
