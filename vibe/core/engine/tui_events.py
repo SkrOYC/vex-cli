@@ -14,7 +14,13 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from vibe.core.tools.manager import ToolManager
-from vibe.core.types import AssistantEvent, BaseEvent, ToolCallEvent, ToolResultEvent
+from vibe.core.types import (
+    AssistantEvent,
+    BaseEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    ToolErrorEvent,
+)
 from vibe.core.utils import logger
 
 if TYPE_CHECKING:
@@ -45,6 +51,7 @@ class TUIEventMapper:
     - on_chat_model_stream -> AssistantEvent (token streaming)
     - on_tool_start -> ToolCallEvent (tool execution begins)
     - on_tool_end -> ToolResultEvent (tool execution completes)
+    - on_tool_error -> ToolErrorEvent (tool execution fails)
 
     Example:
         mapper = TUIEventMapper(config)
@@ -90,6 +97,9 @@ class TUIEventMapper:
 
             case "on_tool_end":
                 return self._map_tool_end(event_data)
+
+            case "on_tool_error":
+                return self._map_tool_error(event_data)
 
             # Other event types are not relevant for TUI display
             case _:
@@ -190,6 +200,31 @@ class TUIEventMapper:
             tool_name=tool_name,
             tool_class=tool_class,
             result=result,
+            tool_call_id=tool_call_id,
+        )
+
+    def _map_tool_error(self, event_data: dict[str, Any]) -> ToolErrorEvent | None:
+        """Map on_tool_error event to ToolErrorEvent.
+
+        Args:
+            event_data: The event data dict containing 'error' under 'data'
+
+        Returns:
+            ToolErrorEvent with tool error information, or None if invalid
+        """
+        tool_name = event_data.get("name", "")
+        if not tool_name:
+            return None
+
+        error_obj = event_data.get("data", {}).get("error")
+        error_message = str(error_obj) if error_obj else "Unknown tool error"
+        tool_call_id = event_data.get("run_id", "")
+
+        logger.warning(f"Tool '{tool_name}' failed: {error_message}")
+
+        return ToolErrorEvent(
+            tool_name=tool_name,
+            error=error_message,
             tool_call_id=tool_call_id,
         )
 

@@ -476,9 +476,7 @@ class VibeApp(App):
 
         # Validate interrupt data structure
         if "action_requests" not in data:
-            logger.warning(
-                f"Interrupt data missing 'action_requests': {data}"
-            )
+            logger.warning(f"Interrupt data missing 'action_requests': {data}")
             return {"approved": False, "error": "Invalid interrupt format"}
 
         # HumanInTheLoopMiddleware always provides action_requests
@@ -573,6 +571,9 @@ class VibeApp(App):
                 prompt, base_dir=self.config.effective_workdir
             )
             async for event in self.agent.run(rendered_prompt):
+                # Yield control to allow UI updates and interrupt checks
+                await asyncio.sleep(0)
+
                 if self._context_progress and self.agent:
                     current_state = self._context_progress.tokens
                     current_tokens = self.agent.stats.context_tokens

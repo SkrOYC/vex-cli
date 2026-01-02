@@ -269,6 +269,18 @@ class ToolResultEvent(BaseEvent):
     tool_call_id: str
 
 
+class ToolErrorEvent(BaseEvent):
+    """Event emitted when a tool execution fails.
+
+    This event is triggered when LangGraph emits an on_tool_error event,
+    indicating that a tool call raised an exception during execution.
+    """
+
+    tool_name: str
+    error: str
+    tool_call_id: str
+
+
 class CompactStartEvent(BaseEvent):
     current_context_tokens: int
     threshold: int
