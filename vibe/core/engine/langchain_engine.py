@@ -185,7 +185,6 @@ class VibeLangChainEngine:
             middleware=self._build_middleware_stack(),
             state_schema=VibeAgentState,
             checkpointer=self._checkpointer,
-            interrupt_before=["tools"],
         )
 
     async def run(self, user_message: str) -> AsyncGenerator[Any, None]:
