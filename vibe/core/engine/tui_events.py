@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from vibe.core.tools.manager import ToolManager
+from vibe.core.tools.manager import NoSuchToolError, ToolManager
 from vibe.core.types import (
     AssistantEvent,
     BaseEvent,
@@ -143,7 +143,7 @@ class TUIEventMapper:
             args_model = tool_class._get_tool_args_results()[0]
             try:
                 args = args_model.model_validate(tool_args)
-            except Exception as e:
+            except ValidationError as e:
                 logger.warning(
                     "Failed to validate args for tool %s: %s. Falling back to generic args.",
                     tool_name,
@@ -185,7 +185,7 @@ class TUIEventMapper:
             _, result_model = tool_class._get_tool_args_results()
             try:
                 result = result_model.model_validate({"output": tool_result})
-            except Exception as e:
+            except ValidationError as e:
                 logger.warning(
                     "Failed to validate result for tool %s: %s. Falling back to generic result.",
                     tool_name,
@@ -240,6 +240,6 @@ class TUIEventMapper:
         try:
             tool_instance = self.tool_manager.get(tool_name)
             return tool_instance.__class__
-        except Exception as e:
-            logger.debug("Could not get tool class for '%s': %s", tool_name, e)
+        except NoSuchToolError as e:
+            logger.debug("Could not get tool class: %s", e)
             return None
